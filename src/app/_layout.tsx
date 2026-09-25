@@ -45,8 +45,13 @@ function AuthGate() {
     if (status === 'loading') return;
     const root = segments[0];
     const isProtected = root ? PROTECTED_ROOTS.includes(root) : false;
+    // Pantallas de entrada (splash / onboarding / login): si ya hay sesión
+    // guardada, saltamos directo al mapa para no pedir login de nuevo.
+    const isEntry = !root || root === 'index' || root === 'inicio' || root === 'login';
     if (status === 'unauthenticated' && isProtected) {
       router.replace('/login');
+    } else if (status === 'authenticated' && isEntry) {
+      router.replace('/mapa');
     }
   }, [status, segments, router]);
 

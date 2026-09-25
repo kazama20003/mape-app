@@ -22,7 +22,13 @@ import { getSocket } from '@/lib/socket';
 interface SpeakingUser {
   id: string;
   name?: string;
+  nickname?: string | null;
   email?: string;
+}
+
+/** Nombre a mostrar: apelativo (indicativo de radio) si existe, si no el nombre. */
+function radioName(u?: { name?: string; nickname?: string | null } | null): string {
+  return u?.nickname || u?.name || 'Operador';
 }
 
 export interface RadioTransmission {
@@ -78,23 +84,30 @@ export function useRadio(channelId: string | undefined) {
       setTimeout(() => setSpeaking(null), 400);
     };
 
-    const onEnded = (t: {
-      id: string;
-      durationSec: number;
-      sender?: { name?: string };
-      createdAt: string;
+    const onEnded = (data: {
+      channelId: string;
+      transmission?: {
+        id: string;
+        durationSec: number;
+        sender?: { name?: string; nickname?: string | null };
+        createdAt: string;
+      };
     }) => {
-      setHistory((prev) =>
-        [
-          {
-            id: t.id,
-            senderName: t.sender?.name ?? 'Operador',
-            durationSec: t.durationSec,
-            at: t.createdAt,
-          },
-          ...prev,
-        ].slice(0, 20),
-      );
+      if (data.channelId !== channelId) return;
+      const t = data.transmission;
+      if (t) {
+        setHistory((prev) =>
+          [
+            {
+              id: t.id,
+              senderName: radioName(t.sender),
+              durationSec: t.durationSec,
+              at: t.createdAt,
+            },
+            ...prev,
+          ].slice(0, 20),
+        );
+      }
       setSpeaking(null);
     };
 
@@ -161,8 +174,9 @@ export function useRadio(channelId: string | undefined) {
         encoding: EncodingType.Base64,
       });
       const socket = getSocket('/radio', token);
+      // Enviar el clip y soltar la palabra (el backend persiste y avisa al canal).
       socket.emit('ptt:audio', { channelId, chunk: base64, mime: 'audio/mp4' });
-      socket.emit('ptt:end', { channelId, durationSec });
+      socket.emit('ptt:release', { channelId, durationSec });
     } catch {
       // no rompemos la UI si falla el envío
     }
@@ -179,7 +193,8 @@ export function useRadio(channelId: string | undefined) {
       recordingRef.current = true;
       startedAtRef.current = Date.now();
       setTalking(true);
-      getSocket('/radio', token).emit('ptt:start', { channelId });
+      // Pedir la palabra: el backend concede el turno y avisa al canal.
+      getSocket('/radio', token).emit('ptt:request', { channelId });
       // Seguridad: corta solo tras 60 s para que el micro nunca quede abierto
       // si por alguna razón no llega el evento de soltar el botón.
       maxTimerRef.current = setTimeout(() => {
@@ -227,7 +242,7 @@ export function useRadio(channelId: string | undefined) {
       id: string;
       durationSec: number;
       createdAt: string;
-      sender?: { name?: string };
+      sender?: { name?: string; nickname?: string | null };
     }
     api
       .get<ApiTx[]>(`/radio/channels/${channelId}/history?limit=20`)
@@ -236,7 +251,7 @@ export function useRadio(channelId: string | undefined) {
         setHistory(
           rows.map((t) => ({
             id: t.id,
-            senderName: t.sender?.name ?? 'Operador',
+            senderName: radioName(t.sender),
             durationSec: t.durationSec,
             at: t.createdAt,
           })),

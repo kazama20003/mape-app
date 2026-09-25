@@ -230,21 +230,21 @@ export default function MapaScreen() {
     return located;
   }, [located, filter]);
 
-  // Resultados del buscador por nombre de operador o código de unidad.
+  // Resultados del buscador por nombre o apelativo de la persona.
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return [];
-    return located
+    return locatedPeople
       .filter(
-        (u) =>
-          (u.operator?.name ?? '').toLowerCase().includes(q) ||
-          (u.operator?.nickname ?? '').toLowerCase().includes(q) ||
-          u.code.toLowerCase().includes(q),
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          (p.nickname ?? '').toLowerCase().includes(q),
       )
       .slice(0, 6);
-  }, [query, located]);
+  }, [query, locatedPeople]);
 
-  const featured = live.data?.find((u) => u.operator) ?? live.data?.[0];
+  // Persona destacada: la primera con ubicación real (sin datos de prueba).
+  const featured = locatedPeople[0];
 
   const fitFleet = () => {
     if (located.length && mapRef.current) {
@@ -255,11 +255,11 @@ export default function MapaScreen() {
     }
   };
 
-  const focusUnit = (u: LocatedUnit) => {
+  const focusPerson = (p: LocatedPerson) => {
     mapRef.current?.animateToRegion(
       {
-        latitude: u.lastLat,
-        longitude: u.lastLng,
+        latitude: p.lastLat,
+        longitude: p.lastLng,
         latitudeDelta: 0.008,
         longitudeDelta: 0.008,
       },
@@ -325,7 +325,7 @@ export default function MapaScreen() {
               onChangeText={setQuery}
               autoFocus
               returnKeyType="search"
-              onSubmitEditing={() => matches[0] && focusUnit(matches[0])}
+              onSubmitEditing={() => matches[0] && focusPerson(matches[0])}
             />
             {query.length > 0 && (
               <PressableScale onPress={() => setQuery('')} accessibilityLabel="Limpiar">
@@ -333,17 +333,20 @@ export default function MapaScreen() {
               </PressableScale>
             )}
           </View>
-          {matches.map((u) => (
-            <PressableScale key={u.id} style={styles.searchRow} onPress={() => focusUnit(u)}>
+          {matches.map((p) => (
+            <PressableScale key={p.id} style={styles.searchRow} onPress={() => focusPerson(p)}>
               <Avatar
-                variant={variantFor(u.operator?.avatarKey)}
-                uri={mediaUrl(u.operator?.avatarKey)}
+                variant={variantFor(p.avatarKey)}
+                uri={mediaUrl(p.avatarKey)}
                 size={30}
               />
               <View style={styles.gap1}>
-                <Text style={styles.searchName}>{displayName(u.operator)}</Text>
+                <Text style={styles.searchName}>{personLabel(p)}</Text>
                 <Text style={styles.searchMeta}>
-                  {u.code} · {u.status === 'EN_RUTA' ? 'En ruta' : 'Detenido'}
+                  {p.name}
+                  {Math.round(p.lastSpeedKmh ?? 0) > 0
+                    ? ` · ${Math.round(p.lastSpeedKmh ?? 0)} km/h`
+                    : ''}
                 </Text>
               </View>
               <Icon name="locate" size={18} color={Mape.ink} />
@@ -410,42 +413,39 @@ export default function MapaScreen() {
         {/* Etiqueta en vivo */}
         <View style={styles.liveBadge}>
           <LiveDot size={8} color={Mape.red} />
-          <Text style={styles.liveText}>En vivo · {located.length} ubicadas</Text>
+          <Text style={styles.liveText}>En vivo · {locatedPeople.length} en línea</Text>
         </View>
       </Animated.View>
 
-      {/* Tarjeta destacada */}
-      <Animated.View style={styles.featured} entering={rise(4)}>
-        <Avatar
-          variant={variantFor(featured?.operator?.avatarKey)}
-          uri={mediaUrl(featured?.operator?.avatarKey)}
-          size={46}
-          radius={23}
-        />
-        <PressableScale
-          style={styles.featuredInfo}
-          onPress={() =>
-            router.push({ pathname: '/detalle', params: featured ? { unitId: featured.id } : {} })
-          }>
-          <Text style={styles.featuredName}>
-            {displayName(featured?.operator)} · {featured?.code ?? '—'}
-          </Text>
-          <Text style={styles.featuredSub} numberOfLines={1}>
-            {featured?.status === 'EN_RUTA' ? 'En ruta' : 'Detenido'} ·{' '}
-            {Math.round(featured?.lastSpeedKmh ?? 0)} km/h
-          </Text>
-        </PressableScale>
-        <View style={styles.featuredEta}>
-          <Text style={styles.featuredEtaBig}>{live.data?.length ?? 0}</Text>
-          <Text style={styles.featuredEtaSmall}>en vivo</Text>
-        </View>
-        <PressableScale
-          style={styles.featuredRadio}
-          onPress={() => router.navigate('/radio')}
-          accessibilityLabel="Ir al radio">
-          <Icon name="mic" size={18} color={Mape.white} />
-        </PressableScale>
-      </Animated.View>
+      {/* Tarjeta destacada: solo si hay alguien realmente ubicado */}
+      {featured && (
+        <Animated.View style={styles.featured} entering={rise(4)}>
+          <Avatar
+            variant={variantFor(featured.avatarKey)}
+            uri={mediaUrl(featured.avatarKey)}
+            size={46}
+            radius={23}
+          />
+          <View style={styles.featuredInfo}>
+            <Text style={styles.featuredName} numberOfLines={1}>
+              {personLabel(featured)}
+            </Text>
+            <Text style={styles.featuredSub} numberOfLines={1}>
+              En vivo · {Math.round(featured.lastSpeedKmh ?? 0)} km/h
+            </Text>
+          </View>
+          <View style={styles.featuredEta}>
+            <Text style={styles.featuredEtaBig}>{locatedPeople.length}</Text>
+            <Text style={styles.featuredEtaSmall}>en línea</Text>
+          </View>
+          <PressableScale
+            style={styles.featuredRadio}
+            onPress={() => router.navigate('/radio')}
+            accessibilityLabel="Ir al radio">
+            <Icon name="mic" size={18} color={Mape.white} />
+          </PressableScale>
+        </Animated.View>
+      )}
 
     </Screen>
   );

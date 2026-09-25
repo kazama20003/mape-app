@@ -115,7 +115,9 @@ export default function RadioScreen() {
               <View style={styles.txDot} />
               <View style={styles.gap1}>
                 <Text style={styles.speakingLabel}>HABLANDO AHORA</Text>
-                <Text style={styles.speakingName}>{speaking.name ?? 'Operador'}</Text>
+                <Text style={styles.speakingName}>
+                  {speaking.nickname || speaking.name || 'Operador'}
+                </Text>
               </View>
               <Waveform heights={SPEAKER_BARS} color={Mape.red} style={{ marginLeft: 6 }} />
             </>
