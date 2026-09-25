@@ -130,6 +130,19 @@ export interface LiveUnit {
   } | null;
 }
 
+export interface LivePerson {
+  id: string;
+  name: string;
+  nickname: string | null;
+  avatarKey: string | null;
+  role: Role;
+  lastLat: number | null;
+  lastLng: number | null;
+  lastSpeedKmh: number | null;
+  lastHeading: number | null;
+  lastPositionAt: string | null;
+}
+
 export interface Alert {
   id: string;
   type: string;

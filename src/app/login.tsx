@@ -120,7 +120,7 @@ export default function LoginScreen() {
       {/* Formulario */}
       <Animated.View style={styles.form} entering={rise(1)}>
         <View style={styles.field}>
-          <Text style={styles.label}>Correo o código de operador</Text>
+          <Text style={styles.label}>Correo (admin) o DNI</Text>
           <View style={styles.inputWrap}>
             <Icon name="user" size={20} color="#6A6A6A" strokeWidth={1.8} />
             <TextInput
@@ -129,6 +129,7 @@ export default function LoginScreen() {
               autoCapitalize="none"
               keyboardType="email-address"
               style={styles.input}
+              placeholder="correo@mape.app o DNI"
               placeholderTextColor="#9A9A9A"
             />
           </View>

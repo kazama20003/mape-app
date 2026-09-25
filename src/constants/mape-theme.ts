@@ -8,6 +8,7 @@ export const Mape = {
   ink: '#0A0A0A', // negro principal (botones, textos, nav)
   white: '#FFFFFF',
   red: '#E5322D', // acento rojo
+  blue: '#208AEF', // acento azul (mi ubicación en el mapa)
   redDark: '#B8241F', // etiquetas/labels de alerta
   redSoftBg: '#FDE3E2', // fondo suave de chip de alerta
   card: '#FFFFFF',

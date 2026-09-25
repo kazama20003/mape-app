@@ -1,3 +1,4 @@
+import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
@@ -16,9 +17,11 @@ import { Font, Mape } from '@/constants/mape-theme';
 import { useAuth } from '@/features/auth/auth-context';
 import { useAlertMetrics, useUnitsSummary } from '@/features/data/hooks';
 import { useLiveUnits } from '@/features/tracking/use-live-units';
+import { useLocationPermission } from '@/features/tracking/use-location-permission';
 import { useLocationReporter } from '@/features/tracking/use-location-reporter';
+import { useLivePeople, usePresenceReporter } from '@/features/tracking/use-presence';
 import { mediaUrl } from '@/lib/api';
-import type { LiveUnit } from '@/lib/types';
+import type { LivePerson, LiveUnit } from '@/lib/types';
 
 // Centro por defecto: Lima, Perú (cuando aún no hay unidades con posición).
 const DEFAULT_REGION = {
@@ -91,6 +94,55 @@ function UnitMarker({ u }: { u: LocatedUnit }) {
   );
 }
 
+type LocatedPerson = LivePerson & { lastLat: number; lastLng: number };
+
+function personHasPosition(p: LivePerson): p is LocatedPerson {
+  return p.lastLat != null && p.lastLng != null;
+}
+
+/** Etiqueta de la persona: apelativo si existe; para el admin, "Admin". */
+function personLabel(p: LivePerson): string {
+  if (p.nickname) return p.nickname;
+  if (p.role === 'ADMIN') return 'Admin';
+  return p.name.split(' ')[0];
+}
+
+/** Marcador con el avatar y apelativo de una persona (cualquier rol). */
+function PersonMarker({ p, isSelf }: { p: LocatedPerson; isSelf: boolean }) {
+  const [tracks, setTracks] = useState(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => setTracks(false), 1500);
+    return () => clearTimeout(t);
+  }, []);
+
+  const ringColor = isSelf ? Mape.blue : p.role === 'ADMIN' ? Mape.ink : '#2E9E5B';
+
+  return (
+    <Marker
+      coordinate={{ latitude: p.lastLat, longitude: p.lastLng }}
+      title={`${personLabel(p)}${isSelf ? ' (tú)' : ''}`}
+      description={p.role === 'ADMIN' ? 'Administrador' : p.name}
+      anchor={{ x: 0.5, y: 0.5 }}
+      tracksViewChanges={tracks}>
+      <View style={markerStyles.wrap}>
+        <View style={[markerStyles.ring, { backgroundColor: ringColor }]}>
+          <Avatar
+            variant={variantFor(p.avatarKey)}
+            uri={mediaUrl(p.avatarKey)}
+            size={38}
+            borderWidth={2}
+            borderColor={Mape.white}
+          />
+        </View>
+        <View style={markerStyles.tag}>
+          <Text style={markerStyles.tagText}>{personLabel(p)}</Text>
+        </View>
+      </View>
+    </Marker>
+  );
+}
+
 export default function MapaScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -103,7 +155,41 @@ export default function MapaScreen() {
   const summary = useUnitsSummary();
   const metrics = useAlertMetrics();
   const live = useLiveUnits();
-  useLocationReporter(); // los operadores reportan su GPS al backend
+  const people = useLivePeople();
+  const locationPermission = useLocationPermission(); // pide permiso a cualquier rol
+  const reporterStatus = useLocationReporter(locationPermission); // operadores reportan su GPS (por unidad)
+  usePresenceReporter(locationPermission); // todos reportan su propia ubicación
+
+  // Centra el mapa en la ubicación propia (admin u operador) al conceder permiso,
+  // salvo que ya haya unidades ubicadas (esas tienen prioridad de encuadre).
+  const centeredSelf = useRef(false);
+  useEffect(() => {
+    if (locationPermission !== 'granted' || centeredSelf.current) return;
+    let active = true;
+    (async () => {
+      try {
+        const pos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        if (!active || centeredSelf.current) return;
+        centeredSelf.current = true;
+        mapRef.current?.animateToRegion(
+          {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02,
+          },
+          600,
+        );
+      } catch {
+        // sin fix de GPS todavía: mantenemos la región por defecto
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [locationPermission]);
 
   const s = summary.data;
   const filters = [
@@ -114,9 +200,28 @@ export default function MapaScreen() {
   const firstName = user?.name?.split(' ')[0] ?? 'operador';
   const alertsCount = metrics.data?.pendientes ?? 0;
 
+  // Aviso cuando la ubicación no se está usando/reportando.
+  const locationHint = useMemo(() => {
+    if (locationPermission === 'denied') {
+      return 'Sin permiso de ubicación: activa el GPS para Mape en los ajustes del teléfono.';
+    }
+    if (reporterStatus === 'no-unit') {
+      return 'No tienes una unidad asignada: pide a un administrador que te asigne una.';
+    }
+    if (reporterStatus === 'sharing-off') {
+      return 'Compartir ubicación está desactivado en Ajustes; tu unidad no se verá en el mapa.';
+    }
+    return null;
+  }, [locationPermission, reporterStatus]);
+
   const located = useMemo(
     () => (live.data ?? []).filter(hasPosition),
     [live.data],
+  );
+
+  const locatedPeople = useMemo(
+    () => (people.data ?? []).filter(personHasPosition),
+    [people.data],
   );
 
   const visible = useMemo(() => {
@@ -266,6 +371,14 @@ export default function MapaScreen() {
         })}
       </Animated.View>
 
+      {/* Aviso de ubicación */}
+      {locationHint && (
+        <View style={styles.hint}>
+          <Icon name="locate" size={16} color={Mape.redDark} />
+          <Text style={styles.hintText}>{locationHint}</Text>
+        </View>
+      )}
+
       {/* Mapa */}
       <Animated.View style={styles.map} entering={rise(3)}>
         <MapView
@@ -278,6 +391,9 @@ export default function MapaScreen() {
           toolbarEnabled={false}>
           {visible.map((u) => (
             <UnitMarker key={u.id} u={u} />
+          ))}
+          {locatedPeople.map((p) => (
+            <PersonMarker key={p.id} p={p} isSelf={p.id === user?.id} />
           ))}
         </MapView>
 
@@ -442,6 +558,18 @@ const styles = StyleSheet.create({
   filterDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Mape.red },
   filterText: { fontSize: 13, fontFamily: Font.medium, color: Mape.ink },
   filterTextActive: { color: Mape.white, fontFamily: Font.semibold },
+
+  hint: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Mape.redSoftBg,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  hintText: { flex: 1, fontSize: 12, fontFamily: Font.medium, color: Mape.redDark },
 
   map: {
     marginTop: 14,

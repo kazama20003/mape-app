@@ -49,6 +49,7 @@ function variantFor(key: string | null | undefined): AvatarVariant {
 interface FormState {
   name: string;
   nickname: string;
+  dni: string;
   email: string;
   password: string;
   role: Role;
@@ -59,6 +60,7 @@ interface FormState {
 const EMPTY_FORM: FormState = {
   name: '',
   nickname: '',
+  dni: '',
   email: '',
   password: '',
   role: 'OPERATOR',
@@ -96,9 +98,13 @@ export default function AdminUsuariosScreen() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (editing === 'new') {
+        const isAdmin = form.role === 'ADMIN';
         return api.post('/users', {
-          email: form.email.trim().toLowerCase(),
-          password: form.password,
+          // El admin usa correo; el personal (operador/supervisor) usa DNI.
+          email: form.email.trim() ? form.email.trim().toLowerCase() : undefined,
+          operatorCode: isAdmin ? undefined : form.dni.trim() || undefined,
+          // Contraseña opcional para el personal: el backend usa el DNI por defecto.
+          password: form.password ? form.password : undefined,
           name: form.name.trim(),
           nickname: form.nickname.trim() || undefined,
           role: form.role,
@@ -123,6 +129,27 @@ export default function AdminUsuariosScreen() {
     },
   });
 
+  // Importa el personal activo desde RRHH (crea/actualiza usuarios por DNI).
+  const importMutation = useMutation({
+    mutationFn: () =>
+      api.post<{ created: number; updated: number; fetched: number }>(
+        '/users/sync-personal',
+      ),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'users'] });
+      RNAlert.alert(
+        'Personal importado',
+        `${r.created} nuevos, ${r.updated} actualizados (de ${r.fetched}). Acceden con su DNI como usuario y contraseña.`,
+      );
+    },
+    onError: (e: unknown) => {
+      RNAlert.alert(
+        'No se pudo importar',
+        e instanceof Error ? e.message : 'Error al consultar el sistema de personal.',
+      );
+    },
+  });
+
   const openNew = () => {
     setForm(EMPTY_FORM);
     setEditing('new');
@@ -132,6 +159,7 @@ export default function AdminUsuariosScreen() {
     setForm({
       name: u.name,
       nickname: u.nickname ?? '',
+      dni: u.operatorCode ?? '',
       email: u.email,
       password: '',
       role: u.role,
@@ -169,10 +197,15 @@ export default function AdminUsuariosScreen() {
     }
   };
 
+  const isAdminRole = form.role === 'ADMIN';
   const canSave =
     form.name.trim().length > 0 &&
     (editing !== 'new' ||
-      (form.email.trim().length > 3 && form.password.length >= 6));
+      (isAdminRole
+        ? form.email.trim().length > 3 && form.password.length >= 6
+        : // Personal: basta el DNI (mín. 6). La contraseña por defecto será el DNI.
+          form.dni.trim().length >= 6 &&
+          (form.password.length === 0 || form.password.length >= 6)));
 
   // ── Vista de edición / creación ─────────────────────────────
   if (editing) {
@@ -232,14 +265,14 @@ export default function AdminUsuariosScreen() {
             />
           </Field>
 
-          {isNew && (
+          {isNew && isAdminRole && (
             <>
-              <Field label="Correo">
+              <Field label="Correo (acceso de administrador)">
                 <TextInput
                   style={styles.input}
                   value={form.email}
                   onChangeText={(t) => setForm((f) => ({ ...f, email: t }))}
-                  placeholder="operador@mape.app"
+                  placeholder="admin@mape.app"
                   placeholderTextColor={Mape.textFaint}
                   autoCapitalize="none"
                   keyboardType="email-address"
@@ -255,6 +288,35 @@ export default function AdminUsuariosScreen() {
                   secureTextEntry
                 />
               </Field>
+            </>
+          )}
+
+          {isNew && !isAdminRole && (
+            <>
+              <Field label="DNI (usuario de acceso)">
+                <TextInput
+                  style={styles.input}
+                  value={form.dni}
+                  onChangeText={(t) => setForm((f) => ({ ...f, dni: t }))}
+                  placeholder="44556677"
+                  placeholderTextColor={Mape.textFaint}
+                  autoCapitalize="none"
+                  keyboardType="number-pad"
+                />
+              </Field>
+              <Field label="Contraseña (opcional; por defecto el DNI)">
+                <TextInput
+                  style={styles.input}
+                  value={form.password}
+                  onChangeText={(t) => setForm((f) => ({ ...f, password: t }))}
+                  placeholder="Déjalo vacío para usar el DNI"
+                  placeholderTextColor={Mape.textFaint}
+                  secureTextEntry
+                />
+              </Field>
+              <Text style={styles.dniHint}>
+                El personal inicia sesión con su DNI como usuario y contraseña.
+              </Text>
             </>
           )}
 
@@ -324,10 +386,23 @@ export default function AdminUsuariosScreen() {
           style={styles.searchInput}
           value={search}
           onChangeText={setSearch}
-          placeholder="Buscar por nombre, apelativo o correo…"
+          placeholder="Buscar por nombre, apelativo o DNI…"
           placeholderTextColor={Mape.textFaint}
         />
       </View>
+
+      <PressableScale
+        style={styles.importBtn}
+        onPress={() => !importMutation.isPending && importMutation.mutate()}>
+        {importMutation.isPending ? (
+          <ActivityIndicator size="small" color={Mape.ink} />
+        ) : (
+          <>
+            <Icon name="userPlus" size={18} color={Mape.ink} strokeWidth={1.8} />
+            <Text style={styles.importText}>Importar personal (RRHH)</Text>
+          </>
+        )}
+      </PressableScale>
 
       {usersQuery.isLoading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={Mape.ink} />
@@ -349,7 +424,10 @@ export default function AdminUsuariosScreen() {
                     {u.nickname ? ` · ${u.nickname}` : ''}
                   </Text>
                   <Text style={styles.userMeta}>
-                    {ROLES.find((r) => r.key === u.role)?.label ?? u.role} · {u.email}
+                    {ROLES.find((r) => r.key === u.role)?.label ?? u.role} ·{' '}
+                    {u.role === 'ADMIN'
+                      ? u.email
+                      : `DNI ${u.operatorCode ?? '—'}`}
                   </Text>
                 </View>
                 <View
@@ -409,6 +487,21 @@ const styles = StyleSheet.create({
     height: 48,
   },
   searchInput: { flex: 1, fontSize: 15, fontFamily: Font.regular, color: Mape.ink, padding: 0 },
+
+  importBtn: {
+    marginTop: 10,
+    height: 46,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: Mape.border,
+    backgroundColor: Mape.white,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  importText: { fontSize: 14, fontFamily: Font.semibold, color: Mape.ink },
+  dniHint: { fontSize: 12, color: Mape.textMuted, fontFamily: Font.regular, paddingLeft: 4 },
 
   userRow: {
     flexDirection: 'row',
