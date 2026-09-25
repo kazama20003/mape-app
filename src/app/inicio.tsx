@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, G, Path, Rect } from 'react-native-svg';
@@ -39,7 +39,11 @@ export default function InicioScreen() {
       <View style={styles.header}>
         <View style={styles.brandRow}>
           <View style={styles.logoBox}>
-            <Icon name="pin" size={22} color={Mape.white} />
+            <Image
+              source={require('../../assets/images/mape-logo.png')}
+              style={styles.logoImg}
+              resizeMode="contain"
+            />
           </View>
           <Text style={styles.brand}>Mape</Text>
         </View>
@@ -203,10 +207,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Mape.ink,
+    backgroundColor: Mape.white,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  logoImg: { width: 32, height: 32 },
   brand: { fontSize: 22, fontFamily: Font.bold, letterSpacing: -0.5, color: Mape.ink },
   skip: { height: 40, paddingHorizontal: 16, borderRadius: 20, backgroundColor: Mape.white, justifyContent: 'center' },
   skipText: { fontSize: 14, fontFamily: Font.semibold, color: Mape.ink },

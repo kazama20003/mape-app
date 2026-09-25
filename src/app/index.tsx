@@ -1,12 +1,11 @@
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
 import { DashRoute, TypingDots } from '@/components/mape/anim';
-import { Icon } from '@/components/mape/icons';
 import { Font, Mape } from '@/constants/mape-theme';
 
 export default function SplashScreen() {
@@ -39,7 +38,11 @@ export default function SplashScreen() {
       </Svg>
 
       <Animated.View entering={ZoomIn.springify().damping(12)} style={styles.logo}>
-        <Icon name="pin" size={48} color={Mape.white} />
+        <Image
+          source={require('../../assets/images/mape-logo.png')}
+          style={styles.logoImg}
+          resizeMode="contain"
+        />
       </Animated.View>
 
       <Animated.View entering={FadeIn.delay(200).duration(400)} style={styles.titleBlock}>
@@ -65,13 +68,14 @@ const styles = StyleSheet.create({
     gap: 18,
   },
   logo: {
-    width: 96,
-    height: 96,
+    width: 108,
+    height: 108,
     borderRadius: 30,
-    backgroundColor: Mape.red,
+    backgroundColor: Mape.white,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  logoImg: { width: 88, height: 88 },
   titleBlock: { alignItems: 'center', gap: 6 },
   brand: { fontSize: 40, fontFamily: Font.bold, letterSpacing: -1.5, color: Mape.white },
   tagline: { fontSize: 14, color: Mape.textOnDarkSoft, fontFamily: Font.regular },

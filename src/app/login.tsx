@@ -4,6 +4,7 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -100,7 +101,11 @@ export default function LoginScreen() {
           </PressableScale>
           <View style={styles.headerBrand}>
             <View style={styles.headerLogo}>
-              <Icon name="pin" size={18} color={Mape.white} strokeWidth={2} />
+              <Image
+                source={require('../../assets/images/mape-logo.png')}
+                style={styles.headerLogoImg}
+                resizeMode="contain"
+              />
             </View>
             <Text style={styles.headerBrandText}>Mape</Text>
           </View>
@@ -253,10 +258,11 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: Mape.red,
+    backgroundColor: Mape.white,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerLogoImg: { width: 26, height: 26 },
   headerBrandText: { color: Mape.white, fontSize: 18, fontFamily: Font.bold, letterSpacing: -0.4 },
   headerTitleBlock: { gap: 8 },
   h1: { color: Mape.white, fontSize: 36, lineHeight: 40, fontFamily: Font.medium, letterSpacing: -1 },
