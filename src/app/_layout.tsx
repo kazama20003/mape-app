@@ -17,6 +17,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider, useAuth } from '@/features/auth/auth-context';
 import { usePushRegistration } from '@/features/notifications/use-push-registration';
+import { useChatRealtime } from '@/features/data/hooks';
 import { SettingsProvider } from '@/features/settings/settings-context';
 import { OfflineBanner } from '@/components/mape/offline-banner';
 import { queryClient } from '@/lib/query-client';
@@ -53,6 +54,7 @@ function AuthGate() {
   const router = useRouter();
 
   usePushRegistration();
+  useChatRealtime();
 
   useEffect(() => {
     if (status === 'loading') return;

@@ -3,11 +3,12 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 
 import { useAuth } from '@/features/auth/auth-context';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
+import { presentLocalNotification } from '@/features/notifications/local';
 import type {
   Alert,
   AlertMetrics,
@@ -173,6 +174,20 @@ export function useConversation(id?: string) {
     enabled: !!id,
   });
 
+  // Marca la conversación como leída en el backend y refresca el badge global.
+  const markRead = useCallback(() => {
+    if (!id) return;
+    api
+      .post(`/conversations/${id}/read`)
+      .then(() => qc.invalidateQueries({ queryKey: ['conversations'] }))
+      .catch(() => undefined);
+  }, [id, qc]);
+
+  // Al abrir/cargar la conversación, márcala como leída (limpia el badge).
+  useEffect(() => {
+    if (query.isSuccess) markRead();
+  }, [query.isSuccess, markRead]);
+
   useEffect(() => {
     if (!token || !id) return;
     const socket = getSocket('/chat', token);
@@ -186,15 +201,53 @@ export function useConversation(id?: string) {
             ? { ...prev, messages: [...prev.messages, msg] }
             : prev,
       );
+      // El chat está abierto: el mensaje entrante ya está leído.
+      markRead();
     };
     socket.on('message:new', onNew);
     return () => {
       socket.emit('conversation:leave', id);
       socket.off('message:new', onNew);
     };
-  }, [token, id, qc]);
+  }, [token, id, qc, markRead]);
 
   return query;
+}
+
+/**
+ * Suscripción global al namespace de chat para mantener la lista de
+ * conversaciones y el badge de no leídos actualizados en vivo, aunque el
+ * usuario no tenga ninguna conversación abierta. Debe montarse una sola vez,
+ * en un punto alto del árbol (ver AuthGate en _layout).
+ */
+export function useChatRealtime() {
+  const { token } = useAuth();
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    if (!token) return;
+    const socket = getSocket('/chat', token);
+    const onUpdated = (payload: {
+      conversationId: string;
+      messageId?: string;
+      title?: string;
+      body?: string;
+    }) => {
+      qc.invalidateQueries({ queryKey: ['conversations'] });
+      // Notificación local: se ve en primer plano y en emulador, donde el push
+      // remoto de Expo no llega. Se omite si el chat ya está abierto.
+      void presentLocalNotification({
+        title: payload.title ?? 'Nuevo mensaje',
+        body: payload.body ?? '',
+        conversationId: payload.conversationId,
+        data: { messageId: payload.messageId },
+      });
+    };
+    socket.on('conversation:updated', onUpdated);
+    return () => {
+      socket.off('conversation:updated', onUpdated);
+    };
+  }, [token, qc]);
 }
 
 export interface SendMessagePayload {

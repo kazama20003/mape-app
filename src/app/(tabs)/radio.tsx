@@ -14,7 +14,8 @@ import { PressableScale } from '@/components/mape/pressable-scale';
 import { Font, Mape } from '@/constants/mape-theme';
 import { useAuth } from '@/features/auth/auth-context';
 import { useChannels } from '@/features/data/hooks';
-import { useRadio } from '@/features/radio/use-radio';
+import { useChannelChat } from '@/features/radio/use-channel-chat';
+import { useRadioSfu } from '@/features/radio/use-radio-sfu';
 
 const SPEAKER_BARS = [8, 18, 26, 12, 22, 10, 16];
 const FALLBACK_CHANNELS = ['Canal 1', 'Canal 2 · Norte', 'Taller'];
@@ -39,16 +40,22 @@ export default function RadioScreen() {
     ? channels.map((c) => (c.description ? `${c.name} · ${c.description}` : c.name))
     : FALLBACK_CHANNELS;
 
-  const {
-    talking,
-    speaking,
+  const [muted, setMuted] = useState(false);
+  const toggleMuted = () => setMuted((v) => !v);
+
+  // Audio EN VIVO por SFU (mediasoup): hablar/escuchar en tiempo real.
+  const { talking, speaking, startTalking, stopTalking } = useRadioSfu(
+    activeChannel?.id,
     muted,
-    toggleMuted,
-    startTalking,
-    stopTalking,
-    playLast,
-    hasLastAudio,
-  } = useRadio(activeChannel?.id);
+  );
+
+  // Historial del canal (para reescuchar el último audio guardado).
+  const { messages, playAudio } = useChannelChat(activeChannel?.id);
+  const hasLastAudio = messages.some((m) => m.audioKey);
+  const playLast = () => {
+    const last = messages.find((m) => m.audioKey);
+    if (last) void playAudio(last.audioKey);
+  };
 
   const openChat = () => {
     if (!activeChannel) return;
@@ -164,9 +171,7 @@ export default function RadioScreen() {
               <View style={styles.txDot} />
               <View style={styles.gap1}>
                 <Text style={styles.speakingLabel}>HABLANDO AHORA</Text>
-                <Text style={styles.speakingName}>
-                  {speaking.nickname || speaking.name || 'Operador'}
-                </Text>
+                <Text style={styles.speakingName}>En vivo · alguien del canal</Text>
               </View>
               <Waveform heights={SPEAKER_BARS} color={Mape.red} style={{ marginLeft: 6 }} />
             </>
@@ -196,15 +201,6 @@ export default function RadioScreen() {
         <Text style={styles.pttCaption}>
           Mantén presionado o toca una vez para transmitir
         </Text>
-        {hasLastAudio && (
-          <PressableScale
-            style={styles.replayBtn}
-            onPress={() => void playLast()}
-            accessibilityLabel="Escuchar el último audio">
-            <Icon name="play" size={16} color={Mape.ink} strokeWidth={2} />
-            <Text style={styles.replayText}>Escuchar último</Text>
-          </PressableScale>
-        )}
 
         {/* Acciones */}
         <Animated.View style={styles.actions} entering={rise(3)}>
@@ -221,6 +217,13 @@ export default function RadioScreen() {
             <Text style={[styles.actionText, !muted && styles.actionTextActive]}>
               {muted ? 'Silencio' : 'Altavoz'}
             </Text>
+          </PressableScale>
+          <PressableScale
+            style={[styles.actionBtn, !hasLastAudio && styles.actionBtnOff]}
+            onPress={() => hasLastAudio && void playLast()}
+            accessibilityLabel="Escuchar el último audio">
+            <Icon name="play" size={18} color={Mape.ink} strokeWidth={2} />
+            <Text style={styles.actionText}>Último</Text>
           </PressableScale>
           <PressableScale
             style={styles.actionBtn}
@@ -370,6 +373,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionBtnActive: { backgroundColor: Mape.ink },
+  actionBtnOff: { opacity: 0.4 },
   actionText: { fontSize: 13, color: Mape.ink, fontFamily: Font.semibold },
   actionTextActive: { color: Mape.white },
 

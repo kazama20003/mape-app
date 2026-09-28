@@ -34,6 +34,7 @@ import { Screen } from '@/components/mape/screen';
 import { Font, Mape } from '@/constants/mape-theme';
 import { useAuth } from '@/features/auth/auth-context';
 import { useConversation, useSendMessage } from '@/features/data/hooks';
+import { setActiveConversation } from '@/features/notifications/local';
 import { api, mediaUrl } from '@/lib/api';
 import type { ChatUser, Message } from '@/lib/types';
 
@@ -128,6 +129,12 @@ export default function ChatScreen() {
     },
     [],
   );
+
+  // Marca esta conversación como "abierta" para no auto-notificar sus mensajes.
+  useEffect(() => {
+    setActiveConversation(id ?? null);
+    return () => setActiveConversation(null);
+  }, [id]);
 
   const sendText = () => {
     const body = text.trim();

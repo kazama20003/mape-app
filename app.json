@@ -66,7 +66,13 @@
       ],
       "expo-notifications",
       "expo-local-authentication",
-      "expo-image-picker"
+      "expo-image-picker",
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "microphonePermission": "Mape usa el micrófono para las transmisiones de radio en vivo."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": false,
