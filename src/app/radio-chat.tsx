@@ -50,9 +50,6 @@ export default function RadioChatScreen() {
     if (!res.canceled && res.assets[0]) await sendImage(res.assets[0].uri);
   };
 
-  // Orden cronológico (más antiguo arriba, más nuevo abajo) como un chat.
-  const chrono = [...messages].reverse();
-
   return (
     <Screen style={[styles.root, { paddingTop: insets.top + 16 }]} transition="push">
       <View style={styles.header}>
@@ -67,13 +64,16 @@ export default function RadioChatScreen() {
       </View>
 
       <FlatList
-        data={chrono}
+        data={messages}
         keyExtractor={(m) => m.id}
         style={styles.list}
         contentContainerStyle={{ paddingVertical: 14, gap: 8 }}
         showsVerticalScrollIndicator={false}
+        inverted
         ListEmptyComponent={
-          <Text style={styles.empty}>Aún no hay mensajes en este canal.</Text>
+          <Text style={[styles.empty, styles.emptyInverted]}>
+            Aún no hay mensajes en este canal.
+          </Text>
         }
         renderItem={({ item: h }) => (
           <View style={[styles.bubbleRow, h.mine && styles.bubbleRowMine]}>
@@ -170,6 +170,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 40,
   },
+  // La FlatList invertida voltea su contenido; recompensamos el texto vacío.
+  emptyInverted: { transform: [{ scaleY: -1 }] },
 
   bubbleRow: { flexDirection: 'row', justifyContent: 'flex-start' },
   bubbleRowMine: { justifyContent: 'flex-end' },
