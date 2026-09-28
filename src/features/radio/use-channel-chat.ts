@@ -87,13 +87,16 @@ export function useChannelChat(channelId: string | undefined) {
     if (!url) return;
     try {
       await setAudioModeAsync({
+        allowsRecording: false,
         playsInSilentMode: true,
         shouldRouteThroughEarpiece: false,
         shouldPlayInBackground: true,
+        interruptionMode: 'doNotMix',
       });
       playerRef.current?.remove();
       playerRef.current = null;
       const player = createAudioPlayer(url);
+      player.volume = 1;
       playerRef.current = player;
       player.play();
     } catch {

@@ -349,18 +349,22 @@ export function useRadio(channelId: string | undefined) {
       // Si el micrófono ya está armado (estás en la pestaña Radio) NO tocamos el
       // modo de audio: cambiarlo des-prepara el recorder y recorta el inicio de
       // tu próxima transmisión ("hola" -> "la"). Solo lo ajustamos si no lo está.
-      if (!armedRef.current) {
-        await setAudioModeAsync({
-          allowsRecording: false,
-          playsInSilentMode: true,
-          shouldRouteThroughEarpiece: false,
-          shouldPlayInBackground: true, // seguir escuchando en 2.º plano
-        });
-      }
+      // Reproducir SIEMPRE en modo reproducción (no grabación) a volumen pleno:
+      // el modo grabación/comunicación baja mucho el volumen. Se re-arma el
+      // micrófono en el siguiente toque de HABLAR.
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        shouldRouteThroughEarpiece: false,
+        shouldPlayInBackground: true, // seguir escuchando en 2.º plano
+        interruptionMode: 'doNotMix', // foco de audio exclusivo = volumen pleno
+      });
+      armedRef.current = false;
       // Corta cualquier clip anterior para que no se superpongan (doble audio = eco).
       rxPlayerRef.current?.remove();
       rxPlayerRef.current = null;
       const player = createAudioPlayer(uri);
+      player.volume = 1;
       rxPlayerRef.current = player;
       player.play();
     } catch {
@@ -448,18 +452,18 @@ export function useRadio(channelId: string | undefined) {
     const url = mediaUrl(audioKey);
     if (!url) return;
     try {
-      // No des-armar el micrófono si ya está listo (evita recortar el inicio).
-      if (!armedRef.current) {
-        await setAudioModeAsync({
-          allowsRecording: false,
-          playsInSilentMode: true,
-          shouldRouteThroughEarpiece: false,
-          shouldPlayInBackground: true,
-        });
-      }
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        shouldRouteThroughEarpiece: false,
+        shouldPlayInBackground: true,
+        interruptionMode: 'doNotMix',
+      });
+      armedRef.current = false;
       rxPlayerRef.current?.remove();
       rxPlayerRef.current = null;
       const player = createAudioPlayer(url);
+      player.volume = 1;
       rxPlayerRef.current = player;
       player.play();
     } catch {

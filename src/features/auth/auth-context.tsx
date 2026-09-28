@@ -7,7 +7,7 @@ import {
   useState,
 } from 'react';
 import { api, setAccessToken, setRefreshHandler } from '@/lib/api';
-import { closeAllSockets } from '@/lib/socket';
+import { closeAllSockets, getSocket } from '@/lib/socket';
 import { storage, StorageKeys } from '@/lib/storage';
 import type { AuthUser, Session } from '@/lib/types';
 
@@ -28,6 +28,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const refreshTokenRef = useRef<string | null>(null);
+  const lastSignInRef = useRef(0);
 
   const persist = useCallback(async (session: Session) => {
     setAccessToken(session.accessToken);
@@ -96,6 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = useCallback(
     async (identifier: string, password: string) => {
+      lastSignInRef.current = Date.now();
       const session = await api.post<Session>('/auth/login', {
         identifier,
         password,
@@ -116,6 +118,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await clear();
     setStatus('unauthenticated');
   }, [clear]);
+
+  // Sesión única: si esta cuenta inicia sesión en otro dispositivo, el backend
+  // emite "session:revoked" y aquí cerramos sesión (evita marcador doble/bugs).
+  // La gracia de 5 s evita auto-expulsarse justo al iniciar sesión.
+  useEffect(() => {
+    if (status !== 'authenticated' || !token) return;
+    const socket = getSocket('/tracking', token);
+    const onRevoked = () => {
+      if (Date.now() - lastSignInRef.current < 5000) return;
+      void signOut();
+    };
+    socket.on('session:revoked', onRevoked);
+    return () => {
+      socket.off('session:revoked', onRevoked);
+    };
+  }, [status, token, signOut]);
 
   return (
     <AuthContext.Provider value={{ status, user, token, signIn, signOut }}>
