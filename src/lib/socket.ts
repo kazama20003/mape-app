@@ -12,7 +12,9 @@ export function getSocket(namespace: string, token: string): Socket {
     return existing;
   }
   const socket = io(`${WS_ORIGIN}${namespace}`, {
-    transports: ['websocket'],
+    // WebSocket primero; si un dispositivo/red no permite el upgrade, cae a
+    // polling en vez de fallar por completo.
+    transports: ['websocket', 'polling'],
     auth: { token },
     autoConnect: true,
     reconnection: true,

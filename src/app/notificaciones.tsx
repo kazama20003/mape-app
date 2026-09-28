@@ -7,6 +7,7 @@ import { BottomNav } from '@/components/mape/bottom-nav';
 import { Icon, type IconName } from '@/components/mape/icons';
 import { fade, rise } from '@/components/mape/motion';
 import { PressableScale } from '@/components/mape/pressable-scale';
+import { BackButton } from '@/components/mape/back-button';
 import { Screen } from '@/components/mape/screen';
 import { Font, Mape } from '@/constants/mape-theme';
 import { useNotificationPrefs, useUpdateNotificationPrefs } from '@/features/data/hooks';
@@ -39,12 +40,7 @@ export default function NotificacionesScreen() {
   return (
     <Screen style={[styles.root, { paddingTop: insets.top + 20 }]} transition="push">
       <Animated.View style={styles.header} entering={fade(0)}>
-        <PressableScale
-          style={styles.backBtn}
-          onPress={() => router.replace('/perfil')}
-          accessibilityLabel="Volver al perfil">
-          <Icon name="chevronLeft" size={20} color={Mape.ink} strokeWidth={1.8} />
-        </PressableScale>
+        <BackButton onPress={() => router.replace('/perfil')} accessibilityLabel="Volver al perfil" />
         <Text style={styles.title}>Notificaciones</Text>
       </Animated.View>
 

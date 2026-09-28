@@ -12,6 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { Font, Mape } from '@/constants/mape-theme';
+import { useAlertMetrics, useConversations } from '@/features/data/hooks';
 import { Avatar } from './avatar';
 import { Icon, type IconName } from './icons';
 import { PressableScale } from './pressable-scale';
@@ -30,8 +31,8 @@ type Item = {
 const ITEMS: Item[] = [
   { key: 'mapa', label: 'Mapa', icon: 'pin' },
   { key: 'radio', label: 'Radio', icon: 'radio' },
-  { key: 'chats', label: 'Chat', icon: 'chat', badge: 3 },
-  { key: 'alertas', label: 'Alertas', icon: 'bell', dot: true },
+  { key: 'chats', label: 'Chat', icon: 'chat' },
+  { key: 'alertas', label: 'Alertas', icon: 'bell' },
   { key: 'perfil', label: 'Perfil', avatar: true },
 ];
 
@@ -50,6 +51,16 @@ export function BottomNav({
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+
+  // Contadores reales: no leídos de chat y alertas pendientes.
+  const conversations = useConversations();
+  const alerts = useAlertMetrics();
+  const unreadTotal = (conversations.data ?? []).reduce(
+    (sum, c) => sum + (c.unread || 0),
+    0,
+  );
+  const alertsPending = alerts.data?.pendientes ?? 0;
+
   const navigate = (key: NavKey) => {
     if (onNavigate) onNavigate(key);
     else router.replace(`/${key}`);
@@ -74,6 +85,14 @@ export function BottomNav({
       style={[styles.nav, navStyle, { bottom: Math.max(16, insets.bottom + 8) }]}>
       {ITEMS.map((item) => {
         const isActive = item.key === active;
+        // Badge/punto dinámicos según datos reales.
+        const badge =
+          item.key === 'chats' && unreadTotal > 0
+            ? unreadTotal > 99
+              ? 99
+              : unreadTotal
+            : undefined;
+        const showDot = item.key === 'alertas' && alertsPending > 0;
         return (
           <PressableScale
             key={item.key}
@@ -100,12 +119,12 @@ export function BottomNav({
                 {item.label}
               </Animated.Text>
             )}
-            {!isActive && item.badge != null && (
+            {!isActive && badge != null && (
               <View style={styles.badge}>
-                <Text style={styles.badgeText}>{item.badge}</Text>
+                <Text style={styles.badgeText}>{badge}</Text>
               </View>
             )}
-            {!isActive && item.dot && <View style={styles.dot} />}
+            {!isActive && showDot && <View style={styles.dot} />}
           </PressableScale>
         );
       })}

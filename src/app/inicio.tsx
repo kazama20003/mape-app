@@ -86,21 +86,21 @@ export default function InicioScreen() {
         <View style={styles.navBtns}>
           {slide > 0 && (
             <PressableScale style={styles.prevBtn} onPress={() => go(slide - 1)}>
-              <Icon name="chevronLeft" size={20} color={Mape.ink} />
+              <Icon name="arrowLeft" size={22} color={Mape.ink} strokeWidth={2.2} />
             </PressableScale>
           )}
           {slide < 2 ? (
             <PressableScale style={styles.nextBtn} onPress={() => go(slide + 1)}>
               <Text style={styles.nextText}>Siguiente</Text>
               <View style={styles.nextIconWhite}>
-                <Icon name="chevronRight" size={20} color={Mape.ink} />
+                <Icon name="arrowRight" size={22} color={Mape.ink} strokeWidth={2.2} />
               </View>
             </PressableScale>
           ) : (
             <PressableScale style={styles.nextBtn} onPress={() => router.push('/login')}>
               <Text style={styles.nextText}>Comenzar</Text>
               <View style={styles.nextIconRed}>
-                <Icon name="chevronRight" size={20} color={Mape.white} />
+                <Icon name="arrowRight" size={22} color={Mape.white} strokeWidth={2.2} />
               </View>
             </PressableScale>
           )}

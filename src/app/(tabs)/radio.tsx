@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -12,6 +12,7 @@ import { Icon } from '@/components/mape/icons';
 import { fade, rise } from '@/components/mape/motion';
 import { PressableScale } from '@/components/mape/pressable-scale';
 import { Font, Mape } from '@/constants/mape-theme';
+import { useAuth } from '@/features/auth/auth-context';
 import { useChannels } from '@/features/data/hooks';
 import { useRadio } from '@/features/radio/use-radio';
 
@@ -27,7 +28,9 @@ export default function RadioScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [channel, setChannel] = useState(0);
-  const [showHistory, setShowHistory] = useState(true);
+
+  const { user } = useAuth();
+  const canManage = user?.role === 'ADMIN' || user?.role === 'SUPERVISOR';
 
   const channelsQuery = useChannels();
   const channels = channelsQuery.data ?? [];
@@ -36,8 +39,49 @@ export default function RadioScreen() {
     ? channels.map((c) => (c.description ? `${c.name} · ${c.description}` : c.name))
     : FALLBACK_CHANNELS;
 
-  const { talking, speaking, history, muted, toggleMuted, startTalking, stopTalking } =
-    useRadio(activeChannel?.id);
+  const {
+    talking,
+    speaking,
+    muted,
+    toggleMuted,
+    startTalking,
+    stopTalking,
+    playLast,
+    hasLastAudio,
+  } = useRadio(activeChannel?.id);
+
+  const openChat = () => {
+    if (!activeChannel) return;
+    router.push({
+      pathname: '/radio-chat',
+      params: { id: activeChannel.id, name: channelNames[channel] },
+    });
+  };
+
+  // Hablar MANTENIENDO presionado o con un TOQUE (queda fijado hasta el próximo
+  // toque). Usamos refs para no depender del estado async dentro del gesto.
+  const pressStartRef = useRef(0);
+  const latchedRef = useRef(false);
+
+  const onPttIn = () => {
+    if (latchedRef.current) {
+      // Estaba fijado por un toque: este toque lo corta.
+      latchedRef.current = false;
+      void stopTalking();
+      return;
+    }
+    pressStartRef.current = Date.now();
+    void startTalking();
+  };
+  const onPttOut = () => {
+    if (latchedRef.current) return;
+    const heldMs = Date.now() - pressStartRef.current;
+    if (heldMs < 350) {
+      latchedRef.current = true; // fue un toque: queda transmitiendo
+    } else {
+      void stopTalking(); // fue mantenido: corta al soltar
+    }
+  };
 
   return (
     <Screen style={styles.root} transition="fade">
@@ -50,9 +94,14 @@ export default function RadioScreen() {
               {activeChannel ? channelNames[channel] : 'Operaciones · Canal 1'}
             </Text>
           </View>
-          <PressableScale style={styles.settingsBtn} accessibilityLabel="Ajustes de radio">
-            <Icon name="sliders" size={20} color={Mape.white} strokeWidth={1.8} />
-          </PressableScale>
+          {canManage && (
+            <PressableScale
+              style={styles.settingsBtn}
+              onPress={() => router.navigate('/admin-canales')}
+              accessibilityLabel="Gestionar canales">
+              <Icon name="plus" size={22} color={Mape.white} strokeWidth={2.2} />
+            </PressableScale>
+          )}
         </View>
 
         <View style={styles.channels}>
@@ -131,18 +180,29 @@ export default function RadioScreen() {
 
         {/* Botón PTT */}
         <Animated.View style={styles.pttWrap} entering={rise(2)}>
-          <PingRing size={192} color="#F2B8B5" delay={0} />
-          <PingRing size={160} color="#E58A86" delay={600} style={{ top: 16, left: 16 }} />
+          <PingRing size={300} color="#F2B8B5" delay={0} />
+          <PingRing size={260} color="#E58A86" delay={600} style={{ top: 20, left: 20 }} />
           <PressableScale
-            onPressIn={startTalking}
-            onPressOut={stopTalking}
+            onPressIn={onPttIn}
+            onPressOut={onPttOut}
             style={[styles.ptt, talking && styles.pttActive]}
-            accessibilityLabel="Mantén presionado para hablar">
-            <Icon name="mic" size={36} color={Mape.white} strokeWidth={1.8} />
-            <Text style={styles.pttText}>HABLAR</Text>
+            accessibilityLabel="Mantén presionado o toca para hablar">
+            <Icon name="mic" size={68} color={Mape.white} strokeWidth={2} />
+            <Text style={styles.pttText}>{talking ? 'CORTAR' : 'HABLAR'}</Text>
           </PressableScale>
         </Animated.View>
-        <Text style={styles.pttCaption}>Mantén presionado para transmitir a todo el canal</Text>
+        <Text style={styles.pttCaption}>
+          Mantén presionado o toca una vez para transmitir
+        </Text>
+        {hasLastAudio && (
+          <PressableScale
+            style={styles.replayBtn}
+            onPress={() => void playLast()}
+            accessibilityLabel="Escuchar el último audio">
+            <Icon name="play" size={16} color={Mape.ink} strokeWidth={2} />
+            <Text style={styles.replayText}>Escuchar último</Text>
+          </PressableScale>
+        )}
 
         {/* Acciones */}
         <Animated.View style={styles.actions} entering={rise(3)}>
@@ -162,49 +222,13 @@ export default function RadioScreen() {
           </PressableScale>
           <PressableScale
             style={styles.actionBtn}
-            onPress={() => router.push('/nuevo-chat')}
-            accessibilityLabel="Mensaje privado">
-            <Icon name="userPlus" size={18} color={Mape.ink} strokeWidth={1.8} />
-            <Text style={styles.actionText}>Privado</Text>
-          </PressableScale>
-          <PressableScale
-            style={[styles.actionBtn, showHistory && styles.actionBtnActive]}
-            onPress={() => setShowHistory((v) => !v)}
-            accessibilityLabel="Historial">
-            <Icon
-              name="clock"
-              size={18}
-              color={showHistory ? Mape.white : Mape.ink}
-              strokeWidth={1.8}
-            />
-            <Text style={[styles.actionText, showHistory && styles.actionTextActive]}>
-              Historial
-            </Text>
+            onPress={openChat}
+            accessibilityLabel="Ver chat del canal">
+            <Icon name="chat" size={18} color={Mape.ink} strokeWidth={1.8} />
+            <Text style={styles.actionText}>Ver chat</Text>
           </PressableScale>
         </Animated.View>
 
-        {/* Historial */}
-        {showHistory && (
-        <Animated.View style={styles.history} entering={rise(4)}>
-          {history.length === 0 && (
-            <Text style={styles.historyEmpty}>Aún no hay transmisiones en este canal.</Text>
-          )}
-          {history.map((h) => (
-            <View key={h.id} style={styles.historyRow}>
-              <View style={styles.historyIcon}>
-                <Icon name="radio" size={18} color={Mape.ink} strokeWidth={1.8} />
-              </View>
-              <View style={styles.gap1}>
-                <Text style={styles.historyName}>{h.senderName}</Text>
-                <Text style={styles.historyMeta}>{fmtDur(h.durationSec)} · transmisión</Text>
-              </View>
-              <View style={styles.playBtn}>
-                <Icon name="play" size={16} color={Mape.white} />
-              </View>
-            </View>
-          ))}
-        </Animated.View>
-        )}
       </View>
 
     </Screen>
@@ -302,17 +326,28 @@ const styles = StyleSheet.create({
   ringOuter: { top: 0, left: 0, right: 0, bottom: 0, borderColor: '#F2B8B5' },
   ringInner: { top: 16, left: 16, right: 16, bottom: 16, borderColor: '#E58A86' },
   ptt: {
-    width: 144,
-    height: 144,
-    borderRadius: 72,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
     backgroundColor: Mape.red,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 10,
   },
   pttActive: { backgroundColor: Mape.redDark },
-  pttText: { fontSize: 12, color: Mape.white, fontFamily: Font.bold, letterSpacing: 1.2 },
-  pttCaption: { fontSize: 12, color: Mape.textSubtle, fontFamily: Font.regular },
+  pttText: { fontSize: 18, color: Mape.white, fontFamily: Font.bold, letterSpacing: 1.6 },
+  pttCaption: { fontSize: 12, color: Mape.textSubtle, fontFamily: Font.regular, textAlign: 'center' },
+  replayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'center',
+    backgroundColor: Mape.white,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  replayText: { fontSize: 13, color: Mape.ink, fontFamily: Font.semibold },
 
   actions: { flexDirection: 'row', gap: 8, width: '100%' },
   actionBtn: {
@@ -358,4 +393,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  playBtnOff: { opacity: 0.3 },
+
+  chat: { width: '100%', gap: 8 },
+  bubbleRow: { flexDirection: 'row', justifyContent: 'flex-start' },
+  bubbleRowMine: { justifyContent: 'flex-end' },
+  voiceBubble: {
+    maxWidth: '80%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Mape.white,
+    borderRadius: 18,
+    padding: 10,
+    paddingRight: 14,
+  },
+  imgBubble: {
+    maxWidth: '70%',
+    backgroundColor: Mape.white,
+    borderRadius: 18,
+    padding: 6,
+    gap: 4,
+  },
+  bubbleMine: { backgroundColor: Mape.ink },
+  voicePlay: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Mape.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voicePlayMine: { backgroundColor: Mape.white },
+  chatImg: { width: 180, height: 180, borderRadius: 12, backgroundColor: Mape.border },
+  bubbleName: { fontSize: 13, fontFamily: Font.semibold, color: Mape.ink, paddingHorizontal: 2 },
+  bubbleMeta: { fontSize: 12, fontFamily: Font.regular, color: Mape.textMuted },
+  bubbleTextMine: { color: Mape.white },
 });

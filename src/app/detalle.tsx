@@ -9,6 +9,7 @@ import { Avatar } from '@/components/mape/avatar';
 import { Icon } from '@/components/mape/icons';
 import { fade, rise } from '@/components/mape/motion';
 import { PressableScale } from '@/components/mape/pressable-scale';
+import { BackButton } from '@/components/mape/back-button';
 import { Screen } from '@/components/mape/screen';
 import { Font, Mape } from '@/constants/mape-theme';
 import { useUnit } from '@/features/data/hooks';
@@ -76,12 +77,7 @@ export default function DetalleScreen() {
       {/* Cabecera oscura */}
       <Animated.View style={[styles.header, { paddingTop: insets.top + 20 }]} entering={fade(0)}>
         <View style={styles.headerTop}>
-          <PressableScale
-            style={styles.headBtn}
-            onPress={() => router.navigate('/mapa')}
-            accessibilityLabel="Volver al mapa">
-            <Icon name="chevronLeft" size={20} color={Mape.white} />
-          </PressableScale>
+          <BackButton onPress={() => router.navigate('/mapa')} dark accessibilityLabel="Volver al mapa" />
           <Text style={styles.headTitle}>Detalle del operador</Text>
           <PressableScale style={styles.headBtn} accessibilityLabel="Más opciones">
             <Icon name="sliders" size={20} color={Mape.white} strokeWidth={1.8} />

@@ -29,6 +29,7 @@ import { Avatar, type AvatarVariant } from '@/components/mape/avatar';
 import { Icon } from '@/components/mape/icons';
 import { fade } from '@/components/mape/motion';
 import { PressableScale } from '@/components/mape/pressable-scale';
+import { BackButton } from '@/components/mape/back-button';
 import { Screen } from '@/components/mape/screen';
 import { Font, Mape } from '@/constants/mape-theme';
 import { useAuth } from '@/features/auth/auth-context';
@@ -237,12 +238,7 @@ export default function ChatScreen() {
   return (
     <Screen style={styles.root} transition="push">
       <Animated.View style={[styles.header, { paddingTop: insets.top + 12 }]} entering={fade(0)}>
-        <PressableScale
-          style={styles.iconBtn}
-          onPress={() => router.navigate('/chats')}
-          accessibilityLabel="Volver a chats">
-          <Icon name="chevronLeft" size={20} color={Mape.ink} />
-        </PressableScale>
+        <BackButton onPress={() => router.navigate('/chats')} accessibilityLabel="Volver a chats" />
         <View style={styles.groupIcon}>
           <Icon name="chat" size={20} color={Mape.white} strokeWidth={1.8} />
         </View>

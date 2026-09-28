@@ -19,6 +19,7 @@ import { Avatar } from '@/components/mape/avatar';
 import { Icon } from '@/components/mape/icons';
 import { fade, rise } from '@/components/mape/motion';
 import { PressableScale } from '@/components/mape/pressable-scale';
+import { BackButton } from '@/components/mape/back-button';
 import { Screen } from '@/components/mape/screen';
 import { Font, Mape } from '@/constants/mape-theme';
 import { useAuth } from '@/features/auth/auth-context';
@@ -27,8 +28,9 @@ export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { signIn, status } = useAuth();
-  const [email, setEmail] = useState('brayan@mape.app');
-  const [password, setPassword] = useState('mape1234');
+  const [mode, setMode] = useState<'admin' | 'supervisor'>('admin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [remember, setRemember] = useState(true);
   const [focusPass, setFocusPass] = useState(false);
@@ -93,12 +95,7 @@ export default function LoginScreen() {
         </Svg>
 
         <View style={styles.headerTop}>
-          <PressableScale
-            onPress={() => router.back()}
-            style={styles.backBtn}
-            accessibilityLabel="Volver">
-            <Icon name="chevronLeft" size={20} color={Mape.white} />
-          </PressableScale>
+          <BackButton onPress={() => router.back()} dark accessibilityLabel="Volver" />
           <View style={styles.headerBrand}>
             <View style={styles.headerLogo}>
               <Image
@@ -124,17 +121,55 @@ export default function LoginScreen() {
 
       {/* Formulario */}
       <Animated.View style={styles.form} entering={rise(1)}>
+        {/* Selector de tipo de acceso */}
+        <View style={styles.segment}>
+          <PressableScale
+            style={[styles.segmentBtn, mode === 'admin' && styles.segmentBtnOn]}
+            onPress={() => {
+              setMode('admin');
+              setEmail('');
+              setError(null);
+            }}>
+            <Icon
+              name="user"
+              size={16}
+              color={mode === 'admin' ? Mape.white : '#6A6A6A'}
+              strokeWidth={1.8}
+            />
+            <Text style={[styles.segmentText, mode === 'admin' && styles.segmentTextOn]}>
+              Administrador
+            </Text>
+          </PressableScale>
+          <PressableScale
+            style={[styles.segmentBtn, mode === 'supervisor' && styles.segmentBtnOn]}
+            onPress={() => {
+              setMode('supervisor');
+              setEmail('');
+              setError(null);
+            }}>
+            <Icon
+              name="userPlus"
+              size={16}
+              color={mode === 'supervisor' ? Mape.white : '#6A6A6A'}
+              strokeWidth={1.8}
+            />
+            <Text style={[styles.segmentText, mode === 'supervisor' && styles.segmentTextOn]}>
+              Supervisor
+            </Text>
+          </PressableScale>
+        </View>
+
         <View style={styles.field}>
-          <Text style={styles.label}>Correo (admin) o DNI</Text>
+          <Text style={styles.label}>{mode === 'admin' ? 'Correo' : 'DNI'}</Text>
           <View style={styles.inputWrap}>
             <Icon name="user" size={20} color="#6A6A6A" strokeWidth={1.8} />
             <TextInput
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
-              keyboardType="email-address"
+              keyboardType={mode === 'admin' ? 'email-address' : 'number-pad'}
               style={styles.input}
-              placeholder="correo@mape.app o DNI"
+              placeholder={mode === 'admin' ? 'correo@mape.app' : 'Ingresa tu DNI'}
               placeholderTextColor="#9A9A9A"
             />
           </View>
@@ -248,8 +283,6 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     backgroundColor: Mape.panelDark,
-    borderWidth: 1,
-    borderColor: Mape.panelBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -270,6 +303,25 @@ const styles = StyleSheet.create({
   headerLead: { color: Mape.textOnDarkSoft, fontSize: 14, lineHeight: 21, fontFamily: Font.regular },
 
   form: { paddingHorizontal: 28, paddingTop: 24, gap: 12 },
+  segment: {
+    flexDirection: 'row',
+    backgroundColor: Mape.white,
+    borderRadius: 27,
+    padding: 5,
+    gap: 6,
+  },
+  segmentBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  segmentBtnOn: { backgroundColor: Mape.ink },
+  segmentText: { fontSize: 13.5, fontFamily: Font.semibold, color: '#6A6A6A' },
+  segmentTextOn: { color: Mape.white },
   field: { gap: 8 },
   label: { fontSize: 13, fontFamily: Font.semibold, color: '#4A4A4A', paddingLeft: 6 },
   inputWrap: {

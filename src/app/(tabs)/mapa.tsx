@@ -1,7 +1,7 @@
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
@@ -243,9 +243,6 @@ export default function MapaScreen() {
       .slice(0, 6);
   }, [query, locatedPeople]);
 
-  // Persona destacada: la primera con ubicación real (sin datos de prueba).
-  const featured = locatedPeople[0];
-
   const fitFleet = () => {
     if (located.length && mapRef.current) {
       mapRef.current.fitToCoordinates(
@@ -417,36 +414,48 @@ export default function MapaScreen() {
         </View>
       </Animated.View>
 
-      {/* Tarjeta destacada: solo si hay alguien realmente ubicado */}
-      {featured && (
-        <Animated.View style={styles.featured} entering={rise(4)}>
-          <Avatar
-            variant={variantFor(featured.avatarKey)}
-            uri={mediaUrl(featured.avatarKey)}
-            size={46}
-            radius={23}
-          />
-          <View style={styles.featuredInfo}>
-            <Text style={styles.featuredName} numberOfLines={1}>
-              {personLabel(featured)}
-            </Text>
-            <Text style={styles.featuredSub} numberOfLines={1}>
-              En vivo · {Math.round(featured.lastSpeedKmh ?? 0)} km/h
-            </Text>
-          </View>
-          <View style={styles.featuredEta}>
-            <Text style={styles.featuredEtaBig}>{locatedPeople.length}</Text>
-            <Text style={styles.featuredEtaSmall}>en línea</Text>
-          </View>
-          <PressableScale
-            style={styles.featuredRadio}
-            onPress={() => router.navigate('/radio')}
-            accessibilityLabel="Ir al radio">
-            <Icon name="mic" size={18} color={Mape.white} />
-          </PressableScale>
-        </Animated.View>
-      )}
-
+      {/* Lista de usuarios en vivo (con scroll) debajo del mapa */}
+      <Animated.View
+        style={[styles.listWrap, { marginBottom: insets.bottom + 80 }]}
+        entering={rise(4)}>
+        <FlatList
+          data={locatedPeople}
+          keyExtractor={(p) => p.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingTop: 12, paddingBottom: 12, gap: 10 }}
+          ListHeaderComponent={
+            <Text style={styles.listTitle}>En línea · {locatedPeople.length}</Text>
+          }
+          ListEmptyComponent={
+            <Text style={styles.listEmpty}>Nadie en línea con ubicación todavía.</Text>
+          }
+          renderItem={({ item: p }) => {
+            const self = p.id === user?.id;
+            return (
+              <PressableScale style={styles.personRow} onPress={() => focusPerson(p)}>
+                <Avatar
+                  variant={variantFor(p.avatarKey)}
+                  uri={mediaUrl(p.avatarKey)}
+                  size={44}
+                  radius={22}
+                />
+                <View style={styles.personInfo}>
+                  <Text style={styles.personName} numberOfLines={1}>
+                    {personLabel(p)}
+                    {self ? ' (tú)' : ''}
+                  </Text>
+                  <Text style={styles.personSub} numberOfLines={1}>
+                    En vivo · {Math.round(p.lastSpeedKmh ?? 0)} km/h
+                  </Text>
+                </View>
+                <View style={styles.personLocate}>
+                  <Icon name="locate" size={18} color={Mape.ink} strokeWidth={1.8} />
+                </View>
+              </PressableScale>
+            );
+          }}
+        />
+      </Animated.View>
     </Screen>
   );
 }
@@ -574,7 +583,7 @@ const styles = StyleSheet.create({
   map: {
     marginTop: 14,
     flex: 1,
-    minHeight: 280,
+    minHeight: 340,
     borderRadius: 28,
     overflow: 'hidden',
     backgroundColor: '#E6E6E6',
@@ -603,28 +612,38 @@ const styles = StyleSheet.create({
   },
   liveText: { color: Mape.white, fontSize: 12, fontFamily: Font.semibold },
 
-  featured: {
-    marginTop: 12,
-    marginBottom: 96,
-    backgroundColor: Mape.ink,
-    borderRadius: 22,
-    padding: 12,
-    paddingHorizontal: 14,
+  listWrap: { height: 176 },
+  listTitle: {
+    fontSize: 13,
+    fontFamily: Font.semibold,
+    color: Mape.textSubtle,
+    paddingHorizontal: 4,
+    paddingBottom: 8,
+  },
+  listEmpty: {
+    fontSize: 13,
+    color: Mape.textFaint,
+    fontFamily: Font.regular,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  personRow: {
+    backgroundColor: Mape.white,
+    borderRadius: 18,
+    padding: 10,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  featuredInfo: { flex: 1, gap: 2, minWidth: 0 },
-  featuredName: { color: Mape.white, fontSize: 15, fontFamily: Font.semibold },
-  featuredSub: { color: Mape.textOnDark, fontSize: 12, fontFamily: Font.regular },
-  featuredEta: { alignItems: 'flex-end', gap: 2 },
-  featuredEtaBig: { color: Mape.white, fontSize: 18, fontFamily: Font.semibold },
-  featuredEtaSmall: { color: Mape.textOnDark, fontSize: 11, fontFamily: Font.regular },
-  featuredRadio: {
+  personInfo: { flex: 1, gap: 2, minWidth: 0 },
+  personName: { color: Mape.ink, fontSize: 15, fontFamily: Font.semibold },
+  personSub: { color: Mape.textMuted, fontSize: 12, fontFamily: Font.regular },
+  personLocate: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Mape.red,
+    backgroundColor: Mape.bg,
     alignItems: 'center',
     justifyContent: 'center',
   },

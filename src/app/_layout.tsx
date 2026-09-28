@@ -6,8 +6,9 @@ import {
   Outfit_700Bold,
   useFonts,
 } from '@expo-google-fonts/outfit';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClientProvider } from '@tanstack/react-query';
 import { Stack, useRouter, useSegments } from 'expo-router';
+import * as Network from 'expo-network';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -17,10 +18,20 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/features/auth/auth-context';
 import { usePushRegistration } from '@/features/notifications/use-push-registration';
 import { SettingsProvider } from '@/features/settings/settings-context';
+import { OfflineBanner } from '@/components/mape/offline-banner';
 import { queryClient } from '@/lib/query-client';
 import { Mape } from '@/constants/mape-theme';
 
 SplashScreen.preventAutoHideAsync();
+
+// Conecta React Query con el estado real de red: pausa las consultas cuando no
+// hay internet y las reintenta al reconectar (en vez de girar indefinidamente).
+onlineManager.setEventListener((setOnline) => {
+  const sub = Network.addNetworkStateListener((state) => {
+    setOnline(state.isConnected !== false);
+  });
+  return () => sub.remove();
+});
 
 // Rutas que requieren sesión iniciada.
 const PROTECTED_ROOTS = [
@@ -32,6 +43,8 @@ const PROTECTED_ROOTS = [
   'ajustes',
   'notificaciones',
   'admin-usuarios',
+  'admin-canales',
+  'radio-chat',
 ];
 
 function AuthGate() {
@@ -81,6 +94,8 @@ function AuthGate() {
       <Stack.Screen name="ajustes" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="notificaciones" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="admin-usuarios" options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="admin-canales" options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="radio-chat" options={{ animation: 'slide_from_right' }} />
     </Stack>
   );
 }
@@ -111,6 +126,7 @@ export default function RootLayout() {
             <AuthProvider>
               <StatusBar style="dark" />
               <AuthGate />
+              <OfflineBanner />
             </AuthProvider>
           </SettingsProvider>
         </QueryClientProvider>

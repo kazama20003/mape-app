@@ -5,6 +5,7 @@ export type IconName =
   | 'chevronRight'
   | 'chevronLeft'
   | 'arrowRight'
+  | 'arrowLeft'
   | 'user'
   | 'lock'
   | 'eye'
@@ -69,11 +70,13 @@ function renderPaths(
         </>
       );
     case 'chevronRight':
-      return <Path {...s} d="M9 6l6 6-6 6" />;
+      return <Path {...s} d="M10 7l5 5-5 5" />;
     case 'chevronLeft':
-      return <Path {...s} d="M15 6l-6 6 6 6" />;
+      return <Path {...s} d="M14 7l-5 5 5 5" />;
     case 'arrowRight':
       return <Path {...s} d="M5 12h14M13 6l6 6-6 6" />;
+    case 'arrowLeft':
+      return <Path {...s} d="M19 12H5M11 6l-6 6 6 6" />;
     case 'user':
       return (
         <>

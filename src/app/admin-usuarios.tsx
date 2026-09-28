@@ -19,6 +19,7 @@ import { Avatar, type AvatarVariant } from '@/components/mape/avatar';
 import { Icon } from '@/components/mape/icons';
 import { fade, rise } from '@/components/mape/motion';
 import { PressableScale } from '@/components/mape/pressable-scale';
+import { BackButton } from '@/components/mape/back-button';
 import { Screen } from '@/components/mape/screen';
 import { Font, Mape } from '@/constants/mape-theme';
 import { api, mediaUrl } from '@/lib/api';
@@ -213,9 +214,7 @@ export default function AdminUsuariosScreen() {
     return (
       <Screen style={[styles.root, { paddingTop: insets.top + 20 }]} transition="fade">
         <View style={styles.header}>
-          <PressableScale style={styles.backBtn} onPress={() => setEditing(null)}>
-            <Icon name="chevronLeft" size={22} color={Mape.ink} />
-          </PressableScale>
+          <BackButton onPress={() => setEditing(null)} />
           <Text style={styles.title}>{isNew ? 'Nuevo usuario' : 'Editar usuario'}</Text>
           <View style={{ width: 44 }} />
         </View>
@@ -371,9 +370,7 @@ export default function AdminUsuariosScreen() {
   return (
     <Screen style={[styles.root, { paddingTop: insets.top + 20 }]} transition="fade">
       <Animated.View style={styles.header} entering={fade(0)}>
-        <PressableScale style={styles.backBtn} onPress={() => router.back()}>
-          <Icon name="chevronLeft" size={22} color={Mape.ink} />
-        </PressableScale>
+        <BackButton onPress={() => router.back()} />
         <Text style={styles.title}>Usuarios</Text>
         <PressableScale style={styles.addBtn} onPress={openNew} accessibilityLabel="Nuevo usuario">
           <Icon name="plus" size={22} color={Mape.white} />

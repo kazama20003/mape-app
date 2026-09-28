@@ -10,6 +10,7 @@ import { Avatar, type AvatarVariant } from '@/components/mape/avatar';
 import { Icon } from '@/components/mape/icons';
 import { fade, rise } from '@/components/mape/motion';
 import { PressableScale } from '@/components/mape/pressable-scale';
+import { BackButton } from '@/components/mape/back-button';
 import { Screen } from '@/components/mape/screen';
 import { Font, Mape } from '@/constants/mape-theme';
 import { useAuth } from '@/features/auth/auth-context';
@@ -66,12 +67,7 @@ export default function NuevoChatScreen() {
   return (
     <Screen style={[styles.root, { paddingTop: insets.top + 20 }]} transition="push">
       <Animated.View style={styles.header} entering={fade(0)}>
-        <PressableScale
-          style={styles.backBtn}
-          onPress={() => router.replace('/chats')}
-          accessibilityLabel="Volver a chats">
-          <Icon name="chevronLeft" size={20} color={Mape.ink} strokeWidth={1.8} />
-        </PressableScale>
+        <BackButton onPress={() => router.replace('/chats')} accessibilityLabel="Volver a chats" />
         <Text style={styles.title}>Nuevo chat</Text>
       </Animated.View>
 

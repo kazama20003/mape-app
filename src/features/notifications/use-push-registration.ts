@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 
@@ -29,6 +30,7 @@ export function usePushRegistration() {
     if (isExpoGo || Platform.OS === 'web') return;
 
     let cancelled = false;
+    let cleanup: (() => void) | undefined;
 
     (async () => {
       try {
@@ -55,11 +57,23 @@ export function usePushRegistration() {
         if (granted !== 'granted' || cancelled) return;
 
         if (Platform.OS === 'android') {
-          await Notifications.setNotificationChannelAsync('default', {
-            name: 'Alertas Mape',
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 250, 250, 250],
-          });
+          // El backend envía cada push con channelId = categoría, así que
+          // creamos un canal por cada una (si no, Android no las agrupa bien).
+          const channels: { id: string; name: string }[] = [
+            { id: 'default', name: 'General' },
+            { id: 'chatMessages', name: 'Mensajes de chat' },
+            { id: 'radioBroadcasts', name: 'Transmisiones de radio' },
+            { id: 'criticalAlerts', name: 'Alertas críticas' },
+            { id: 'unitStatus', name: 'Estado de unidades' },
+          ];
+          for (const ch of channels) {
+            await Notifications.setNotificationChannelAsync(ch.id, {
+              name: ch.name,
+              importance: Notifications.AndroidImportance.MAX,
+              vibrationPattern: [0, 250, 250, 250],
+              sound: 'default',
+            });
+          }
         }
 
         const projectId = (
@@ -77,6 +91,21 @@ export function usePushRegistration() {
           token: tokenResp.data,
           platform: platform(),
         });
+
+        // Al tocar una notificación, abrir la pantalla correspondiente.
+        const sub = Notifications.addNotificationResponseReceivedListener((resp) => {
+          const data = resp.notification.request.content.data as {
+            kind?: string;
+            conversationId?: string;
+            channelId?: string;
+          };
+          if (data?.conversationId) {
+            router.push({ pathname: '/chat', params: { id: data.conversationId } });
+          } else if (data?.channelId || data?.kind === 'radio') {
+            router.navigate('/radio');
+          }
+        });
+        cleanup = () => sub.remove();
       } catch {
         // sin módulo nativo / sin projectId / sin red: se omite el registro
       }
@@ -84,6 +113,7 @@ export function usePushRegistration() {
 
     return () => {
       cancelled = true;
+      cleanup?.();
     };
   }, [status]);
 }
