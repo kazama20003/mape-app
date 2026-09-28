@@ -180,15 +180,17 @@ export default function RadioScreen() {
 
         {/* Botón PTT */}
         <Animated.View style={styles.pttWrap} entering={rise(2)}>
-          <PingRing size={300} color="#F2B8B5" delay={0} />
-          <PingRing size={260} color="#E58A86" delay={600} style={{ top: 20, left: 20 }} />
+          <PingRing size={292} color="#F2B8B5" delay={0} />
+          <PingRing size={266} color="#E58A86" delay={600} style={{ top: 13, left: 13 }} />
           <PressableScale
             onPressIn={onPttIn}
             onPressOut={onPttOut}
             style={[styles.ptt, talking && styles.pttActive]}
             accessibilityLabel="Mantén presionado o toca para hablar">
-            <Icon name="mic" size={68} color={Mape.white} strokeWidth={2} />
-            <Text style={styles.pttText}>{talking ? 'CORTAR' : 'HABLAR'}</Text>
+            <View style={styles.pttInner}>
+              <Icon name="mic" size={66} color={Mape.white} strokeWidth={2} />
+              <Text style={styles.pttText}>{talking ? 'CORTAR' : 'HABLAR'}</Text>
+            </View>
           </PressableScale>
         </Animated.View>
         <Text style={styles.pttCaption}>
@@ -321,19 +323,26 @@ const styles = StyleSheet.create({
   wave: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 26, marginLeft: 6 },
   waveBar: { width: 3, borderRadius: 2, backgroundColor: Mape.red },
 
-  pttWrap: { width: 192, height: 192, alignItems: 'center', justifyContent: 'center' },
+  pttWrap: { width: 292, height: 292, alignItems: 'center', justifyContent: 'center' },
   ring: { position: 'absolute', borderRadius: 96, borderWidth: 1.5 },
   ringOuter: { top: 0, left: 0, right: 0, bottom: 0, borderColor: '#F2B8B5' },
   ringInner: { top: 16, left: 16, right: 16, bottom: 16, borderColor: '#E58A86' },
   ptt: {
-    width: 240,
-    height: 240,
-    borderRadius: 120,
+    width: 248,
+    height: 248,
+    borderRadius: 124,
     backgroundColor: Mape.red,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    borderWidth: 8,
+    borderColor: 'rgba(255,255,255,0.22)',
+    shadowColor: Mape.red,
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
   },
+  pttInner: { alignItems: 'center', justifyContent: 'center', gap: 10 },
   pttActive: { backgroundColor: Mape.redDark },
   pttText: { fontSize: 18, color: Mape.white, fontFamily: Font.bold, letterSpacing: 1.6 },
   pttCaption: { fontSize: 12, color: Mape.textSubtle, fontFamily: Font.regular, textAlign: 'center' },

@@ -40,6 +40,7 @@ export interface RadioTransmission {
   at: string;
   audioKey?: string | null;
   imageKey?: string | null;
+  text?: string | null;
   mine?: boolean;
 }
 

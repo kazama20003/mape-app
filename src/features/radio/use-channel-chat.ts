@@ -18,6 +18,7 @@ type RawTx = {
   createdAt: string;
   audioKey?: string | null;
   imageKey?: string | null;
+  text?: string | null;
 };
 
 /**
@@ -38,6 +39,7 @@ export function useChannelChat(channelId: string | undefined) {
       at: t.createdAt,
       audioKey: t.audioKey ?? null,
       imageKey: t.imageKey ?? null,
+      text: t.text ?? null,
       mine: t.senderId === user?.id,
     }),
     [user?.id],
@@ -115,7 +117,16 @@ export function useChannelChat(channelId: string | undefined) {
     [channelId, token],
   );
 
+  const sendText = useCallback(
+    (text: string) => {
+      const body = text.trim();
+      if (!channelId || !token || !body) return;
+      getSocket('/radio', token).emit('channel:text', { channelId, text: body });
+    },
+    [channelId, token],
+  );
+
   useEffect(() => () => playerRef.current?.remove(), []);
 
-  return { messages, playAudio, sendImage };
+  return { messages, playAudio, sendImage, sendText };
 }

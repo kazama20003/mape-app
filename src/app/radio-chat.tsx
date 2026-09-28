@@ -1,7 +1,17 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams } from 'expo-router';
-import { FlatList, Linking, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import {
+  FlatList,
+  KeyboardAvoidingView,
+  Linking,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/mape/back-button';
@@ -20,7 +30,15 @@ function fmtDur(sec: number): string {
 export default function RadioChatScreen() {
   const insets = useSafeAreaInsets();
   const { id, name } = useLocalSearchParams<{ id?: string; name?: string }>();
-  const { messages, playAudio, sendImage } = useChannelChat(id);
+  const { messages, playAudio, sendImage, sendText } = useChannelChat(id);
+  const [draft, setDraft] = useState('');
+
+  const submit = () => {
+    const body = draft.trim();
+    if (!body) return;
+    sendText(body);
+    setDraft('');
+  };
 
   const pickImage = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -76,6 +94,13 @@ export default function RadioChatScreen() {
                   {h.mine ? 'Tú' : h.senderName}
                 </Text>
               </PressableScale>
+            ) : h.text ? (
+              <View style={[styles.textBubble, h.mine && styles.bubbleMine]}>
+                <Text style={[styles.bubbleName, h.mine && styles.bubbleTextMine]}>
+                  {h.mine ? 'Tú' : h.senderName}
+                </Text>
+                <Text style={[styles.textBody, h.mine && styles.bubbleTextMine]}>{h.text}</Text>
+              </View>
             ) : (
               <PressableScale
                 onPress={() => h.audioKey && void playAudio(h.audioKey)}
@@ -84,7 +109,7 @@ export default function RadioChatScreen() {
                 <View style={[styles.voicePlay, h.mine && styles.voicePlayMine]}>
                   <Icon name="play" size={14} color={h.mine ? Mape.ink : Mape.white} />
                 </View>
-                <View style={styles.gap1}>
+                <View style={styles.bubbleCol}>
                   <Text style={[styles.bubbleName, h.mine && styles.bubbleTextMine]}>
                     {h.mine ? 'Tú' : h.senderName}
                   </Text>
@@ -98,15 +123,34 @@ export default function RadioChatScreen() {
         )}
       />
 
-      <View style={[styles.bar, { paddingBottom: insets.bottom + 12 }]}>
-        <PressableScale
-          style={styles.imgBtn}
-          onPress={() => void pickImage()}
-          accessibilityLabel="Enviar imagen">
-          <Icon name="image" size={20} color={Mape.white} strokeWidth={1.8} />
-          <Text style={styles.imgBtnText}>Enviar imagen</Text>
-        </PressableScale>
-      </View>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={8}>
+        <View style={[styles.bar, { paddingBottom: insets.bottom + 10 }]}>
+          <PressableScale
+            style={styles.attachBtn}
+            onPress={() => void pickImage()}
+            accessibilityLabel="Enviar imagen">
+            <Icon name="image" size={22} color={Mape.ink} strokeWidth={1.8} />
+          </PressableScale>
+          <TextInput
+            style={styles.input}
+            value={draft}
+            onChangeText={setDraft}
+            placeholder="Escribe un mensaje…"
+            placeholderTextColor={Mape.textFaint}
+            multiline
+            returnKeyType="send"
+            onSubmitEditing={submit}
+          />
+          <PressableScale
+            style={[styles.sendBtn, !draft.trim() && styles.sendBtnOff]}
+            onPress={submit}
+            accessibilityLabel="Enviar mensaje">
+            <Icon name="send" size={20} color={Mape.white} strokeWidth={2} />
+          </PressableScale>
+        </View>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
@@ -146,6 +190,7 @@ const styles = StyleSheet.create({
     padding: 6,
     gap: 4,
   },
+  bubbleCol: { flexShrink: 1, gap: 1 },
   bubbleMine: { backgroundColor: Mape.ink },
   voicePlay: {
     width: 34,
@@ -160,16 +205,50 @@ const styles = StyleSheet.create({
   bubbleName: { fontSize: 13, fontFamily: Font.semibold, color: Mape.ink, paddingHorizontal: 2 },
   bubbleMeta: { fontSize: 12, fontFamily: Font.regular, color: Mape.textMuted },
   bubbleTextMine: { color: Mape.white },
+  textBubble: {
+    maxWidth: '80%',
+    backgroundColor: Mape.white,
+    borderRadius: 18,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    gap: 2,
+  },
+  textBody: { fontSize: 15, fontFamily: Font.regular, color: Mape.ink },
 
-  bar: { paddingTop: 12 },
-  imgBtn: {
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: Mape.ink,
+  bar: {
+    paddingTop: 10,
     flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  attachBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Mape.white,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
   },
-  imgBtnText: { color: Mape.white, fontSize: 15, fontFamily: Font.semibold },
+  input: {
+    flex: 1,
+    minHeight: 44,
+    maxHeight: 120,
+    borderRadius: 22,
+    backgroundColor: Mape.white,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+    fontSize: 15,
+    fontFamily: Font.regular,
+    color: Mape.ink,
+  },
+  sendBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Mape.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendBtnOff: { opacity: 0.4 },
 });
