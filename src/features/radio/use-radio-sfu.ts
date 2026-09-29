@@ -210,6 +210,9 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
         track: track as unknown as MediaStreamTrack,
       });
     } catch {
+      // Si algo falla, liberar el micrófono: nunca debe quedar abierto sin hablar.
+      localStreamRef.current?.getTracks().forEach((t) => t.stop());
+      localStreamRef.current = null;
       setTalking(false);
     }
   }, [channelId, token, talking]);

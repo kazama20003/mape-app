@@ -63,7 +63,11 @@ export default function RadioChatScreen() {
         <View style={{ width: 44 }} />
       </View>
 
-      <FlatList
+      <KeyboardAvoidingView
+        style={styles.kav}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={insets.top + 16}>
+        <FlatList
         data={messages}
         keyExtractor={(m) => m.id}
         style={styles.list}
@@ -123,9 +127,6 @@ export default function RadioChatScreen() {
         )}
       />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={8}>
         <View style={[styles.bar, { paddingBottom: insets.bottom + 10 }]}>
           <PressableScale
             style={styles.attachBtn}
@@ -162,6 +163,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 18, fontFamily: Font.semibold, color: Mape.ink },
   subtitle: { fontSize: 12, fontFamily: Font.regular, color: Mape.textSubtle },
 
+  kav: { flex: 1 },
   list: { flex: 1 },
   empty: {
     fontSize: 13,
