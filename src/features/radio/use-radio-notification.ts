@@ -3,6 +3,8 @@ import * as Notifications from 'expo-notifications';
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 
+import { Mape } from '@/constants/mape-theme';
+
 const isExpoGo = Constants.appOwnership === 'expo';
 const ANDROID_CHANNEL = 'radioLive';
 const CATEGORY = 'radioLive';
@@ -64,6 +66,7 @@ export function useRadioNotification(
             body: label,
             categoryIdentifier: CATEGORY,
             data: { kind: 'radio' },
+            color: Mape.red, // color de acento de marca
             sticky: true, // no se puede descartar deslizando (ongoing)
             autoDismiss: false,
           },

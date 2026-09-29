@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { setAudioModeAsync } from 'expo-audio';
 import { Device, type types as msTypes } from 'mediasoup-client';
 import { mediaDevices, registerGlobals, type MediaStream } from 'react-native-webrtc';
 
@@ -46,6 +47,7 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
     const socket = getSocket('/radio', token);
     let cancelled = false;
     let settingUp = false;
+    let connectedOnce = socket.connected;
 
     const consume = async (producerId: string) => {
       if (mutedRef.current) return;
@@ -114,6 +116,18 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
       try {
         // Partimos de cero: al reconectar, los transportes viejos ya no sirven.
         teardownLocal();
+        // Audio en 2.º plano: la radio sigue sonando con la pantalla apagada y
+        // "duckea" (baja) en vez de cortarse cuando entra otra fuente / llamada.
+        try {
+          await setAudioModeAsync({
+            playsInSilentMode: true,
+            shouldPlayInBackground: true,
+            interruptionMode: 'duckOthers',
+            shouldRouteThroughEarpiece: false,
+          });
+        } catch {
+          /* noop */
+        }
         const caps = await ack<any>(socket, 'ms:rtpCapabilities');
         if (cancelled) return;
         const device = new Device();
@@ -152,8 +166,12 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
       consumersRef.current.clear();
       setSpeaking(false);
     };
-    // Cada (re)conexión vuelve a montar la sesión de audio -> recuperación sola.
-    const onConnect = () => void setup();
+    // La primera conexión ya la monta el setup() inicial de abajo; solo volvemos
+    // a montar en las RE-conexiones, para recuperar el audio tras un corte.
+    const onConnect = () => {
+      if (connectedOnce) void setup();
+      else connectedOnce = true;
+    };
     // Al caerse: soltamos el estado local muerto (el server ya lo liberó).
     const onDisconnect = () => teardownLocal();
 
@@ -162,9 +180,10 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
 
-    // Si el socket ya estaba conectado (se reutiliza entre pantallas), 'connect'
-    // no volverá a dispararse, así que montamos ahora.
-    if (socket.connected) void setup();
+    // Monta la sesión de audio SIEMPRE al entrar (los ack se bufferean hasta que
+    // el socket conecta). Así el `device` queda listo aunque el socket todavía no
+    // haya conectado, y el botón Hablar funciona apenas se abre la pantalla.
+    void setup();
 
     return () => {
       cancelled = true;
