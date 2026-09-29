@@ -280,8 +280,9 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
     // Pitido en paralelo; el envío ya está PRE-ARMADO, así que transmitir es
     // instantáneo (no se abre el micrófono en este momento -> 0 desfase).
     playStartBeep();
-    try {
-      // Fallback por si el pre-armado no alcanzó a montarse (o falló el permiso).
+
+    // Intenta transmitir: asegura transporte de envío + micrófono y produce.
+    const attempt = async () => {
       if (!sendRef.current) {
         const sendParams = await ack<any>(socket, 'ms:createTransport', {
           direction: 'send',
@@ -308,25 +309,36 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
         });
       }
       const track = localStreamRef.current.getAudioTracks()[0];
-      // react-native-webrtc y mediasoup-client difieren en el tipo del track,
-      // pero registerGlobals los hace compatibles en runtime.
-      producerRef.current = await sendRef.current.produce({
+      // stopTracks:false -> no detener el mic pre-armado al cerrar el productor.
+      return await sendRef.current.produce({
         track: track as unknown as MediaStreamTrack,
-        // CLAVE: no detener el track al cerrar el productor. Así el micrófono
-        // pre-armado sigue vivo y se puede volver a hablar (sin esto, la 2.ª vez
-        // el track esta muerto y no transmite).
         stopTracks: false,
       });
+    };
+
+    try {
+      producerRef.current = await attempt();
     } catch {
-      // Falló (canal ocupado / sin permiso): no transmitimos. El track pre-armado
-      // se mantiene listo; solo cerramos el productor a medias.
+      // REINTENTO: el transporte de envío pudo quedar en mal estado (típico tras
+      // una reconexión). Lo reconstruimos y volvemos a intentar una vez, así no
+      // se queda en "pitido pero sin transmisión".
       try {
-        producerRef.current?.close();
+        sendRef.current?.close();
       } catch {
         /* noop */
       }
-      producerRef.current = null;
-      setTalking(false);
+      sendRef.current = null;
+      try {
+        producerRef.current = await attempt();
+      } catch {
+        try {
+          producerRef.current?.close();
+        } catch {
+          /* noop */
+        }
+        producerRef.current = null;
+        setTalking(false);
+      }
     }
   }, [channelId, token, talking]);
 

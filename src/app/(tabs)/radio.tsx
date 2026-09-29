@@ -85,8 +85,10 @@ export default function RadioScreen() {
     radioStatus,
   );
 
-  // Aplica el ruteo de salida (altavoz vs auricular/audífonos) al cambiar el
-  // toggle o al entrar al canal.
+  // Aplica el ruteo de salida (altavoz vs auricular/audífonos). Se re-aplica al
+  // cambiar el toggle, al entrar al canal y cada vez que empieza a sonar audio
+  // (alguien habla/escucha) — así en teléfonos donde el foco de audio se pierde,
+  // el sonido vuelve a salir por el altavoz correcto.
   useEffect(() => {
     if (!activeChannel) return;
     try {
@@ -94,7 +96,7 @@ export default function RadioScreen() {
     } catch {
       /* noop */
     }
-  }, [speakerOn, activeChannel]);
+  }, [speakerOn, activeChannel, speaking, talking]);
 
   // Hablar MANTENIENDO presionado o con un TOQUE (queda fijado hasta el próximo
   // toque). Usamos refs para no depender del estado async dentro del gesto.

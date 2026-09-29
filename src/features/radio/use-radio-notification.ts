@@ -64,8 +64,9 @@ export function useRadioNotification(
         await Notifications.scheduleNotificationAsync({
           identifier: NOTIF_ID, // fijo -> reemplaza, nunca duplica
           content: {
-            title: `MAPE Radio · ${channelName}`,
-            body: label,
+            title: 'MAPE Radio',
+            body: `${channelName} · ${label}`,
+            subtitle: channelName,
             categoryIdentifier: CATEGORY,
             data: { kind: 'radio' },
             color: Mape.red,
