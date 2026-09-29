@@ -21,6 +21,11 @@ const ack = <T = any>(socket: Socket, ev: string, data?: unknown): Promise<T> =>
  * tiempo real a quien hable en el canal. La GRABACIÓN se hace en el servidor
  * (ffmpeg), así que al soltar la nota queda guardada en el chat (llega por
  * `ptt:ended`, que ya maneja useChannelChat).
+ *
+ * RESISTENTE A RECONEXIÓN: si la conexión se cae (red móvil, timeout del proxy,
+ * suspensión del teléfono…), socket.io reconecta solo y el servidor destruye los
+ * transportes de esa sesión. Por eso volvemos a montar TODA la sesión de audio
+ * en cada evento `connect`; así la radio se recupera sola en vez de quedar muda.
  */
 export function useRadioSfu(channelId: string | undefined, muted: boolean) {
   const { token } = useAuth();
@@ -40,6 +45,7 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
     if (!token || !channelId) return;
     const socket = getSocket('/radio', token);
     let cancelled = false;
+    let settingUp = false;
 
     const consume = async (producerId: string) => {
       if (mutedRef.current) return;
@@ -66,9 +72,50 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
       }
     };
 
-    const setup = async () => {
+    // Cierra transportes/consumers/producer locales. Se llama antes de re-montar
+    // (tras reconexión) y al desmontar: el servidor ya los destruyó de su lado.
+    const teardownLocal = () => {
+      consumersRef.current.forEach((c) => {
+        try {
+          c.close();
+        } catch {
+          /* noop */
+        }
+      });
+      consumersRef.current.clear();
       try {
+        producerRef.current?.close();
+      } catch {
+        /* noop */
+      }
+      localStreamRef.current?.getTracks().forEach((t) => t.stop());
+      try {
+        sendRef.current?.close();
+      } catch {
+        /* noop */
+      }
+      try {
+        recvRef.current?.close();
+      } catch {
+        /* noop */
+      }
+      producerRef.current = null;
+      localStreamRef.current = null;
+      sendRef.current = null;
+      recvRef.current = null;
+      deviceRef.current = null;
+      setSpeaking(false);
+      setTalking(false);
+    };
+
+    const setup = async () => {
+      if (settingUp) return; // evita montajes solapados si 'connect' se repite
+      settingUp = true;
+      try {
+        // Partimos de cero: al reconectar, los transportes viejos ya no sirven.
+        teardownLocal();
         const caps = await ack<any>(socket, 'ms:rtpCapabilities');
+        if (cancelled) return;
         const device = new Device();
         await device.load({ routerRtpCapabilities: caps });
         if (cancelled) return;
@@ -78,6 +125,7 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
         const recvParams = await ack<any>(socket, 'ms:createTransport', {
           direction: 'recv',
         });
+        if (cancelled) return;
         const recv = device.createRecvTransport(recvParams);
         recv.on('connect', ({ dtlsParameters }, cb, errb) => {
           ack(socket, 'ms:connectTransport', { direction: 'recv', dtlsParameters })
@@ -89,9 +137,12 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
         socket.emit('channel:join', channelId);
         // Si ya hay alguien hablando, empezar a escucharlo.
         const current = await ack<any>(socket, 'ms:getProducer', { channelId });
+        if (cancelled) return;
         if (current?.producerId) await consume(current.producerId);
       } catch {
         /* noop */
+      } finally {
+        settingUp = false;
       }
     };
 
@@ -101,24 +152,27 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
       consumersRef.current.clear();
       setSpeaking(false);
     };
+    // Cada (re)conexión vuelve a montar la sesión de audio -> recuperación sola.
+    const onConnect = () => void setup();
+    // Al caerse: soltamos el estado local muerto (el server ya lo liberó).
+    const onDisconnect = () => teardownLocal();
 
     socket.on('ms:newProducer', onNewProducer);
     socket.on('ms:producerClosed', onProducerClosed);
-    void setup();
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+
+    // Si el socket ya estaba conectado (se reutiliza entre pantallas), 'connect'
+    // no volverá a dispararse, así que montamos ahora.
+    if (socket.connected) void setup();
 
     return () => {
       cancelled = true;
       socket.off('ms:newProducer', onNewProducer);
       socket.off('ms:producerClosed', onProducerClosed);
-      consumersRef.current.forEach((c) => c.close());
-      consumersRef.current.clear();
-      try {
-        recvRef.current?.close();
-      } catch {
-        /* noop */
-      }
-      recvRef.current = null;
-      deviceRef.current = null;
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+      teardownLocal();
     };
   }, [token, channelId]);
 
@@ -129,7 +183,7 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
     const socket = getSocket('/radio', token);
     setTalking(true);
     try {
-      // Transporte de envío (una vez).
+      // Transporte de envío (una vez por sesión; se recrea tras reconexión).
       if (!sendRef.current) {
         const sendParams = await ack<any>(socket, 'ms:createTransport', {
           direction: 'send',
