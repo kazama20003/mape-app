@@ -16,8 +16,27 @@ import type { Socket } from 'socket.io-client';
 // react-native-webrtc expone los objetos WebRTC globales que mediasoup-client usa.
 registerGlobals();
 
-const ack = <T = any>(socket: Socket, ev: string, data?: unknown): Promise<T> =>
-  new Promise((resolve) => socket.emit(ev, data, resolve));
+// ack con TIMEOUT: si el socket se cae en medio de una petición, el callback de
+// socket.io nunca llega; sin timeout, el `await` se colgaría para siempre y
+// bloquearía setup(). Al vencer, resuelve undefined -> la operación falla limpio
+// y se puede reintentar en la próxima (re)conexión.
+const ack = <T = any>(
+  socket: Socket,
+  ev: string,
+  data?: unknown,
+  timeoutMs = 8000,
+): Promise<T> =>
+  new Promise((resolve) => {
+    let done = false;
+    const finish = (res: T) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(res);
+    };
+    const timer = setTimeout(() => finish(undefined as unknown as T), timeoutMs);
+    socket.emit(ev, data, finish);
+  });
 
 /**
  * Audio en vivo por SFU (mediasoup). Al HABLAR publica el micrófono; escucha en
@@ -39,6 +58,10 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
   const recvRef = useRef<Transport | null>(null);
   const sendRef = useRef<Transport | null>(null);
   const producerRef = useRef<Producer | null>(null);
+  // ¿El usuario quiere estar transmitiendo AHORA? Sirve para cancelar un
+  // produce() en curso si soltó el botón antes de que terminara (evita quedar
+  // transmitiendo "huérfano" con la UI en no-transmitiendo).
+  const wantsTalkRef = useRef(false);
   const localStreamRef = useRef<MediaStream | null>(null);
   const consumersRef = useRef<Map<string, Consumer>>(new Map());
   const mutedRef = useRef(muted);
@@ -277,9 +300,24 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
     if (!device) return;
     const socket = getSocket('/radio', token);
     setTalking(true);
+    wantsTalkRef.current = true;
     // Pitido en paralelo; el envío ya está PRE-ARMADO, así que transmitir es
     // instantáneo (no se abre el micrófono en este momento -> 0 desfase).
     playStartBeep();
+
+    // Si el usuario soltó mientras se creaba el productor, se cierra (huérfano).
+    const commit = (producer: Producer) => {
+      if (!wantsTalkRef.current) {
+        try {
+          producer.close();
+        } catch {
+          /* noop */
+        }
+        socket.emit('ms:closeProducer'); // que el backend también lo cierre
+        return;
+      }
+      producerRef.current = producer;
+    };
 
     // Intenta transmitir: asegura transporte de envío + micrófono y produce.
     const attempt = async () => {
@@ -317,7 +355,7 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
     };
 
     try {
-      producerRef.current = await attempt();
+      commit(await attempt());
     } catch {
       // REINTENTO: el transporte de envío pudo quedar en mal estado (típico tras
       // una reconexión). Lo reconstruimos y volvemos a intentar una vez, así no
@@ -329,13 +367,8 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
       }
       sendRef.current = null;
       try {
-        producerRef.current = await attempt();
+        commit(await attempt());
       } catch {
-        try {
-          producerRef.current?.close();
-        } catch {
-          /* noop */
-        }
         producerRef.current = null;
         setTalking(false);
       }
@@ -344,6 +377,7 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
 
   const stopTalking = useCallback(() => {
     if (!channelId || !token) return;
+    wantsTalkRef.current = false; // cancela un produce() que siga en curso
     const socket = getSocket('/radio', token);
     playEndBeep(); // señal "roger": terminaste de hablar
     try {
