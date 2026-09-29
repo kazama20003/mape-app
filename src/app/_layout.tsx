@@ -17,6 +17,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider, useAuth } from '@/features/auth/auth-context';
 import { usePushRegistration } from '@/features/notifications/use-push-registration';
+import { useStartupPermissions } from '@/features/radio/use-startup-permissions';
 import { useChatRealtime } from '@/features/data/hooks';
 import { SettingsProvider } from '@/features/settings/settings-context';
 import { OfflineBanner } from '@/components/mape/offline-banner';
@@ -54,6 +55,7 @@ function AuthGate() {
   const router = useRouter();
 
   usePushRegistration();
+  useStartupPermissions(status === 'authenticated');
   useChatRealtime();
 
   useEffect(() => {

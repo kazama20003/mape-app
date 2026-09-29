@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -16,6 +16,8 @@ import { useAuth } from '@/features/auth/auth-context';
 import { useChannels } from '@/features/data/hooks';
 import { useChannelChat } from '@/features/radio/use-channel-chat';
 import { useRadioSfu } from '@/features/radio/use-radio-sfu';
+import { playEndBeep, playStartBeep } from '@/features/radio/beeps';
+import { useRadioNotification } from '@/features/radio/use-radio-notification';
 
 const SPEAKER_BARS = [8, 18, 26, 12, 22, 10, 16];
 const FALLBACK_CHANNELS = ['Canal 1', 'Canal 2 · Norte', 'Taller'];
@@ -65,6 +67,28 @@ export default function RadioScreen() {
     });
   };
 
+  // Pitidos walkie-talkie: tono ALTO al empezar (alguien toma la palabra) y tono
+  // BAJO ("roger") al terminar. Cubre a quien habla y a quienes escuchan.
+  const prevActiveRef = useRef(false);
+  useEffect(() => {
+    const a = talking || speaking;
+    if (a && !prevActiveRef.current) playStartBeep();
+    else if (!a && prevActiveRef.current) playEndBeep();
+    prevActiveRef.current = a;
+  }, [talking, speaking]);
+
+  // Notificación persistente del canal: estado + botón "Hablar" (abre la app).
+  const radioStatus = talking
+    ? 'Transmitiendo…'
+    : speaking
+      ? 'Alguien está hablando'
+      : 'Escuchando';
+  useRadioNotification(
+    activeChannel ? channelNames[channel] : undefined,
+    !!activeChannel,
+    radioStatus,
+  );
+
   // Hablar MANTENIENDO presionado o con un TOQUE (queda fijado hasta el próximo
   // toque). Usamos refs para no depender del estado async dentro del gesto.
   const pressStartRef = useRef(0);
@@ -75,6 +99,12 @@ export default function RadioScreen() {
       // Estaba fijado por un toque: este toque lo corta.
       latchedRef.current = false;
       void stopTalking();
+      return;
+    }
+    // Half-duplex: si otro tiene la palabra, no interrumpimos. Hay que esperar a
+    // que termine (el pitido de fin avisa cuándo queda libre el canal).
+    if (speaking) {
+      playEndBeep();
       return;
     }
     pressStartRef.current = Date.now();
