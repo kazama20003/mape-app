@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { setAudioModeAsync } from 'expo-audio';
+import InCallManager from 'react-native-incall-manager';
 import { Device, type types as msTypes } from 'mediasoup-client';
 import { mediaDevices, registerGlobals, type MediaStream } from 'react-native-webrtc';
 
@@ -48,6 +49,16 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
     let cancelled = false;
     let settingUp = false;
     let connectedOnce = socket.connected;
+
+    // Sesión de audio de comunicación: ruteo por ALTAVOZ (volumen alto propio de
+    // la app, sin tocar el volumen multimedia del sistema) y sesión que sigue
+    // viva con la pantalla apagada / en segundo plano y no se cae en llamadas.
+    try {
+      InCallManager.start({ media: 'audio' });
+      InCallManager.setForceSpeakerphoneOn(true);
+    } catch {
+      /* noop */
+    }
 
     const consume = async (producerId: string) => {
       if (mutedRef.current) return;
@@ -192,6 +203,12 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
       teardownLocal();
+      try {
+        InCallManager.setForceSpeakerphoneOn(false);
+        InCallManager.stop();
+      } catch {
+        /* noop */
+      }
     };
   }, [token, channelId]);
 
