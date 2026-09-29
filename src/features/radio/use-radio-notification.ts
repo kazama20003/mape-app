@@ -45,6 +45,12 @@ export function useRadioNotification(
               buttonTitle: 'Hablar',
               options: { opensAppToForeground: true },
             },
+            {
+              identifier: 'DESCONECTAR',
+              buttonTitle: 'Desconectar',
+              // No abre la app: corta la radio en segundo plano.
+              options: { opensAppToForeground: false, isDestructive: true },
+            },
           ]);
           // Limpia notificaciones de radio "pegadas" de versiones anteriores
           // (las que se acumulaban con id dinámico y no se podían descartar).

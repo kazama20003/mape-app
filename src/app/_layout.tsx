@@ -7,13 +7,17 @@ import {
   useFonts,
 } from '@expo-google-fonts/outfit';
 import { onlineManager, QueryClientProvider } from '@tanstack/react-query';
+import Constants from 'expo-constants';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as Network from 'expo-network';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+import { radioSession } from '@/features/radio/radio-session';
 
 import { AuthProvider, useAuth } from '@/features/auth/auth-context';
 import { usePushRegistration } from '@/features/notifications/use-push-registration';
@@ -57,6 +61,36 @@ function AuthGate() {
   usePushRegistration();
   useStartupPermissions(status === 'authenticated');
   useChatRealtime();
+
+  // Acción "Desconectar" de la notificación de radio: corta la sesión (cierra
+  // los sockets), quita la notificación y sale al mapa (desmonta la radio).
+  useEffect(() => {
+    if (Constants.appOwnership === 'expo' || Platform.OS === 'web') return;
+    let sub: { remove: () => void } | undefined;
+    void (async () => {
+      try {
+        const Notifications = await import('expo-notifications');
+        sub = Notifications.addNotificationResponseReceivedListener((resp) => {
+          const data = resp.notification.request.content.data as
+            | { kind?: string }
+            | undefined;
+          if (data?.kind !== 'radio') return;
+          if (resp.actionIdentifier === 'DESCONECTAR') {
+            // Marca la sesión como desconectada: la pantalla de radio libera el
+            // audio y quita la notificación. Se reconecta al volver a la pestaña.
+            radioSession.leave();
+            Notifications.dismissNotificationAsync('radio-live-status').catch(
+              () => {},
+            );
+            router.replace('/mapa');
+          }
+        });
+      } catch {
+        /* noop */
+      }
+    })();
+    return () => sub?.remove();
+  }, [router]);
 
   useEffect(() => {
     if (status === 'loading') return;

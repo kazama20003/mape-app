@@ -1,5 +1,5 @@
-import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import InCallManager from 'react-native-incall-manager';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +19,7 @@ import { useChannelChat } from '@/features/radio/use-channel-chat';
 import { useRadioSfu } from '@/features/radio/use-radio-sfu';
 import { playEndBeep } from '@/features/radio/beeps';
 import { useRadioNotification } from '@/features/radio/use-radio-notification';
+import { radioSession, useRadioDisconnected } from '@/features/radio/radio-session';
 
 const SPEAKER_BARS = [8, 18, 26, 12, 22, 10, 16];
 const FALLBACK_CHANNELS = ['Canal 1', 'Canal 2 · Norte', 'Taller'];
@@ -51,9 +52,20 @@ export default function RadioScreen() {
   // fuerce el altavoz del teléfono.
   const [speakerOn, setSpeakerOn] = useState(true);
 
-  // Audio EN VIVO por SFU (mediasoup): hablar/escuchar en tiempo real.
+  // ¿Se pulsó "Desconectar" en la notificación? Al enfocar la pestaña de radio
+  // se reconecta automáticamente.
+  const disconnected = useRadioDisconnected();
+  useFocusEffect(
+    useCallback(() => {
+      radioSession.rejoin();
+    }, []),
+  );
+
+  // Audio EN VIVO por SFU (mediasoup): hablar/escuchar en tiempo real. Si está
+  // desconectado (botón de la notificación), no se monta la sesión (channelId
+  // undefined -> se libera el audio).
   const { talking, speaking, startTalking, stopTalking } = useRadioSfu(
-    activeChannel?.id,
+    disconnected ? undefined : activeChannel?.id,
     muted,
   );
 
@@ -80,8 +92,8 @@ export default function RadioScreen() {
       ? 'Alguien está hablando'
       : 'Escuchando';
   useRadioNotification(
-    activeChannel ? channelNames[channel] : undefined,
-    !!activeChannel,
+    activeChannel && !disconnected ? channelNames[channel] : undefined,
+    !!activeChannel && !disconnected,
     radioStatus,
   );
 

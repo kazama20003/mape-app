@@ -26,3 +26,8 @@ export function getSocket(namespace: string, token: string): Socket {
 export function closeAllSockets() {
   Object.values(sockets).forEach((s) => s.disconnect());
 }
+
+/** Desconecta (y detiene la reconexión de) un namespace concreto. */
+export function closeSocket(namespace: string) {
+  sockets[namespace]?.disconnect();
+}
