@@ -51,18 +51,17 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
     let settingUp = false;
     let connectedOnce = socket.connected;
 
-    // Sesión de audio de comunicación: ruteo por ALTAVOZ (volumen alto propio de
-    // la app, sin tocar el volumen multimedia del sistema) y sesión que sigue
-    // viva con la pantalla apagada / en segundo plano y no se cae en llamadas.
+    // Sesión de audio de comunicación (volumen propio de la app, sin tocar el
+    // volumen multimedia del sistema) que sigue viva con la pantalla apagada /
+    // en segundo plano y no se cae en llamadas. El ruteo (altavoz vs auricular/
+    // audífonos) lo controla el toggle de la pantalla de radio.
     try {
       InCallManager.start({ media: 'audio' });
-      InCallManager.setForceSpeakerphoneOn(true);
     } catch {
       /* noop */
     }
 
     const consume = async (producerId: string) => {
-      if (mutedRef.current) return;
       const device = deviceRef.current;
       const recv = recvRef.current;
       if (!device || !recv) return;
@@ -80,8 +79,16 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
         });
         consumersRef.current.set(consumer.id, consumer);
         await ack(socket, 'ms:resume', { consumerId: consumer.id });
+        // Si el canal está en silencio, se pausa la reproducción localmente.
+        if (mutedRef.current) {
+          try {
+            consumer.pause();
+          } catch {
+            /* noop */
+          }
+        }
         setSpeaking(true);
-        playStartBeep(); // señal: alguien empezó a hablar
+        if (!mutedRef.current) playStartBeep(); // señal: alguien empezó a hablar
       } catch {
         /* noop */
       }
@@ -214,7 +221,7 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
       consumersRef.current.forEach((c) => c.close());
       consumersRef.current.clear();
       setSpeaking(false);
-      playEndBeep(); // señal: el otro terminó de hablar (canal libre)
+      if (!mutedRef.current) playEndBeep(); // señal: el otro terminó (canal libre)
     };
     // La primera conexión ya la monta el setup() inicial de abajo; solo volvemos
     // a montar en las RE-conexiones, para recuperar el audio tras un corte.
@@ -250,6 +257,19 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
       }
     };
   }, [token, channelId]);
+
+  // Silencio (mute): pausa/reanuda la reproducción de los consumers en curso,
+  // sin desconectar. Así el botón de silencio afecta al audio que ya está sonando.
+  useEffect(() => {
+    consumersRef.current.forEach((c) => {
+      try {
+        if (muted) c.pause();
+        else c.resume();
+      } catch {
+        /* noop */
+      }
+    });
+  }, [muted]);
 
   const startTalking = useCallback(async () => {
     if (!channelId || !token || talking) return;
@@ -292,6 +312,10 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
       // pero registerGlobals los hace compatibles en runtime.
       producerRef.current = await sendRef.current.produce({
         track: track as unknown as MediaStreamTrack,
+        // CLAVE: no detener el track al cerrar el productor. Así el micrófono
+        // pre-armado sigue vivo y se puede volver a hablar (sin esto, la 2.ª vez
+        // el track esta muerto y no transmite).
+        stopTracks: false,
       });
     } catch {
       // Falló (canal ocupado / sin permiso): no transmitimos. El track pre-armado

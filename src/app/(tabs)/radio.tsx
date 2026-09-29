@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import InCallManager from 'react-native-incall-manager';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Animated from 'react-native-reanimated';
@@ -45,6 +46,11 @@ export default function RadioScreen() {
   const [muted, setMuted] = useState(false);
   const toggleMuted = () => setMuted((v) => !v);
 
+  // Ruteo de salida: Altavoz (fuerte, propio de la app) vs Normal (auricular /
+  // audífonos). Por defecto altavoz. Con audífonos, cambia a Normal para que no
+  // fuerce el altavoz del teléfono.
+  const [speakerOn, setSpeakerOn] = useState(true);
+
   // Audio EN VIVO por SFU (mediasoup): hablar/escuchar en tiempo real.
   const { talking, speaking, startTalking, stopTalking } = useRadioSfu(
     activeChannel?.id,
@@ -78,6 +84,17 @@ export default function RadioScreen() {
     !!activeChannel,
     radioStatus,
   );
+
+  // Aplica el ruteo de salida (altavoz vs auricular/audífonos) al cambiar el
+  // toggle o al entrar al canal.
+  useEffect(() => {
+    if (!activeChannel) return;
+    try {
+      InCallManager.setForceSpeakerphoneOn(speakerOn);
+    } catch {
+      /* noop */
+    }
+  }, [speakerOn, activeChannel]);
 
   // Hablar MANTENIENDO presionado o con un TOQUE (queda fijado hasta el próximo
   // toque). Usamos refs para no depender del estado async dentro del gesto.
@@ -227,7 +244,7 @@ export default function RadioScreen() {
           <PressableScale
             style={[styles.actionBtn, !muted && styles.actionBtnActive]}
             onPress={toggleMuted}
-            accessibilityLabel="Altavoz">
+            accessibilityLabel="Silenciar el canal">
             <Icon
               name="speaker"
               size={18}
@@ -235,7 +252,21 @@ export default function RadioScreen() {
               strokeWidth={1.8}
             />
             <Text style={[styles.actionText, !muted && styles.actionTextActive]}>
-              {muted ? 'Silencio' : 'Altavoz'}
+              {muted ? 'Silencio' : 'Sonido'}
+            </Text>
+          </PressableScale>
+          <PressableScale
+            style={[styles.actionBtn, speakerOn && styles.actionBtnActive]}
+            onPress={() => setSpeakerOn((v) => !v)}
+            accessibilityLabel="Alternar altavoz o auricular">
+            <Icon
+              name="speaker"
+              size={18}
+              color={speakerOn ? Mape.white : Mape.ink}
+              strokeWidth={1.8}
+            />
+            <Text style={[styles.actionText, speakerOn && styles.actionTextActive]}>
+              {speakerOn ? 'Altavoz' : 'Normal'}
             </Text>
           </PressableScale>
           <PressableScale
@@ -250,7 +281,7 @@ export default function RadioScreen() {
             onPress={openChat}
             accessibilityLabel="Ver chat del canal">
             <Icon name="chat" size={18} color={Mape.ink} strokeWidth={1.8} />
-            <Text style={styles.actionText}>Ver chat</Text>
+            <Text style={styles.actionText}>Chat</Text>
           </PressableScale>
         </Animated.View>
 
@@ -381,7 +412,7 @@ const styles = StyleSheet.create({
   },
   replayText: { fontSize: 13, color: Mape.ink, fontFamily: Font.semibold },
 
-  actions: { flexDirection: 'row', gap: 8, width: '100%' },
+  actions: { flexDirection: 'row', gap: 6, width: '100%' },
   actionBtn: {
     flex: 1,
     height: 44,
@@ -390,11 +421,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 5,
+    paddingHorizontal: 4,
   },
   actionBtnActive: { backgroundColor: Mape.ink },
   actionBtnOff: { opacity: 0.4 },
-  actionText: { fontSize: 13, color: Mape.ink, fontFamily: Font.semibold },
+  actionText: { fontSize: 12, color: Mape.ink, fontFamily: Font.semibold },
   actionTextActive: { color: Mape.white },
 
   history: { width: '100%', gap: 6 },
