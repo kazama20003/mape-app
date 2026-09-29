@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { setAudioModeAsync } from 'expo-audio';
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import InCallManager from 'react-native-incall-manager';
 import { Device, type types as msTypes } from 'mediasoup-client';
 import { mediaDevices, registerGlobals, type MediaStream } from 'react-native-webrtc';
@@ -64,6 +64,9 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
   const wantsTalkRef = useRef(false);
   const localStreamRef = useRef<MediaStream | null>(null);
   const consumersRef = useRef<Map<string, Consumer>>(new Map());
+  // Reproductor de silencio en loop: mantiene vivo el foreground service de audio
+  // para que el audio en vivo (WebRTC) siga sonando con la app en 2.º plano.
+  const keepAliveRef = useRef<AudioPlayer | null>(null);
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
 
@@ -84,6 +87,28 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
     } catch {
       /* noop */
     }
+    // Silencio en LOOP: arranca el foreground service de audio de expo-audio, así
+    // Android no suspende la salida de sonido con la app en 2.º plano (sin esto,
+    // la notificación decía "hablando" pero no se escuchaba hasta volver a la app).
+    void (async () => {
+      try {
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          shouldPlayInBackground: true,
+        });
+      } catch {
+        /* noop */
+      }
+      try {
+        const ka = createAudioPlayer(require('../../../assets/silence.wav'));
+        ka.loop = true;
+        ka.volume = 0;
+        ka.play();
+        keepAliveRef.current = ka;
+      } catch {
+        /* noop */
+      }
+    })();
 
     const consume = async (producerId: string) => {
       const device = deviceRef.current;
@@ -283,6 +308,12 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
       teardownLocal();
+      try {
+        keepAliveRef.current?.remove();
+      } catch {
+        /* noop */
+      }
+      keepAliveRef.current = null;
       try {
         InCallManager.setForceSpeakerphoneOn(false);
         InCallManager.stop();
