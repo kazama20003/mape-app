@@ -30,6 +30,9 @@ export function useChannelChat(channelId: string | undefined) {
   const { token, user } = useAuth();
   const [messages, setMessages] = useState<RadioTransmission[]>([]);
   const playerRef = useRef<AudioPlayer | null>(null);
+  // Reproductor pre-cargado de la última nota de voz (para que "Último" suene al
+  // instante, sin esperar el buffer al presionar).
+  const preloadRef = useRef<{ key: string; player: AudioPlayer } | null>(null);
 
   const mapTx = useCallback(
     (t: RawTx): RadioTransmission => ({
@@ -84,7 +87,7 @@ export function useChannelChat(channelId: string | undefined) {
 
   const playAudio = useCallback(async (audioKey?: string | null) => {
     const url = mediaUrl(audioKey);
-    if (!url) return;
+    if (!url || !audioKey) return;
     try {
       await setAudioModeAsync({
         allowsRecording: false,
@@ -93,6 +96,20 @@ export function useChannelChat(channelId: string | undefined) {
         shouldPlayInBackground: true,
         interruptionMode: 'doNotMix',
       });
+      // Si la nota está PRE-CARGADA, suena al instante (sin esperar el buffer).
+      if (preloadRef.current?.key === audioKey) {
+        playerRef.current?.remove();
+        playerRef.current = preloadRef.current.player;
+        preloadRef.current = null; // se consume; el efecto recargará la última
+        playerRef.current.volume = 1;
+        try {
+          playerRef.current.seekTo(0);
+        } catch {
+          /* noop */
+        }
+        playerRef.current.play();
+        return;
+      }
       playerRef.current?.remove();
       playerRef.current = null;
       const player = createAudioPlayer(url);
@@ -103,6 +120,27 @@ export function useChannelChat(channelId: string | undefined) {
       // sin red o audio inválido
     }
   }, []);
+
+  // Pre-carga la ÚLTIMA nota de voz apenas llega, para que "Último" suene ya.
+  useEffect(() => {
+    const lastAudio = messages.find((m) => m.audioKey)?.audioKey;
+    if (!lastAudio || preloadRef.current?.key === lastAudio) return;
+    const url = mediaUrl(lastAudio);
+    if (!url) return;
+    try {
+      preloadRef.current?.player.remove();
+    } catch {
+      /* noop */
+    }
+    preloadRef.current = null;
+    try {
+      const p = createAudioPlayer(url);
+      p.volume = 1;
+      preloadRef.current = { key: lastAudio, player: p };
+    } catch {
+      preloadRef.current = null;
+    }
+  }, [messages]);
 
   const sendImage = useCallback(
     async (uri: string) => {
@@ -129,7 +167,13 @@ export function useChannelChat(channelId: string | undefined) {
     [channelId, token],
   );
 
-  useEffect(() => () => playerRef.current?.remove(), []);
+  useEffect(
+    () => () => {
+      playerRef.current?.remove();
+      preloadRef.current?.player.remove();
+    },
+    [],
+  );
 
   return { messages, playAudio, sendImage, sendText };
 }

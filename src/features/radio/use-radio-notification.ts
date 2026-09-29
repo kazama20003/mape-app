@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { Platform } from 'react-native';
 
 import { Mape } from '@/constants/mape-theme';
@@ -8,45 +8,33 @@ import { Mape } from '@/constants/mape-theme';
 const isExpoGo = Constants.appOwnership === 'expo';
 const ANDROID_CHANNEL = 'radioLive';
 const CATEGORY = 'radioLive';
+// Identificador FIJO: cada actualización reemplaza LA MISMA notificación en vez
+// de crear una nueva (antes salían varias al cambiar de estado rápido).
+const NOTIF_ID = 'radio-live-status';
+
+let setupReady = false;
 
 /**
  * Notificación PERSISTENTE mientras estás en un canal de radio: muestra el
  * estado (escuchando / alguien habla / transmitiendo) y un botón "Hablar" que
  * abre la app en la radio. Se quita al salir del canal o desmontar la pantalla.
- *
- * Versión SIMPLE: el botón solo trae la app al frente (no transmite en segundo
- * plano; eso requeriría un foreground service nativo).
  */
 export function useRadioNotification(
   channelName: string | undefined,
   active: boolean,
   label: string,
 ) {
-  const idRef = useRef<string | null>(null);
-  const setupRef = useRef(false);
-
   useEffect(() => {
     if (isExpoGo || Platform.OS === 'web') return;
-
     let cancelled = false;
-
-    const clear = async () => {
-      if (!idRef.current) return;
-      try {
-        await Notifications.dismissNotificationAsync(idRef.current);
-      } catch {
-        /* noop */
-      }
-      idRef.current = null;
-    };
 
     const show = async () => {
       try {
-        if (!setupRef.current) {
+        if (!setupReady) {
           if (Platform.OS === 'android') {
             await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL, {
               name: 'Radio en vivo',
-              // LOW: la notificación no suena ni vibra al actualizar el estado.
+              // LOW: no suena ni vibra al actualizar el estado.
               importance: Notifications.AndroidImportance.LOW,
             });
           }
@@ -57,30 +45,48 @@ export function useRadioNotification(
               options: { opensAppToForeground: true },
             },
           ]);
-          setupRef.current = true;
+          // Limpia notificaciones de radio "pegadas" de versiones anteriores
+          // (las que se acumulaban con id dinámico y no se podían descartar).
+          try {
+            const shown = await Notifications.getPresentedNotificationsAsync();
+            for (const n of shown) {
+              const d = n.request.content.data as { kind?: string } | undefined;
+              if (d?.kind === 'radio' && n.request.identifier !== NOTIF_ID) {
+                await Notifications.dismissNotificationAsync(n.request.identifier);
+              }
+            }
+          } catch {
+            /* noop */
+          }
+          setupReady = true;
         }
-        const id = await Notifications.scheduleNotificationAsync({
-          ...(idRef.current ? { identifier: idRef.current } : {}),
+        if (cancelled) return;
+        await Notifications.scheduleNotificationAsync({
+          identifier: NOTIF_ID, // fijo -> reemplaza, nunca duplica
           content: {
             title: `MAPE Radio · ${channelName}`,
             body: label,
             categoryIdentifier: CATEGORY,
             data: { kind: 'radio' },
-            color: Mape.red, // color de acento de marca
-            sticky: true, // no se puede descartar deslizando (ongoing)
+            color: Mape.red,
+            sticky: true, // ongoing (no se descarta deslizando)
             autoDismiss: false,
           },
           trigger: Platform.OS === 'android' ? { channelId: ANDROID_CHANNEL } : null,
         });
-        if (cancelled) {
-          try {
-            await Notifications.dismissNotificationAsync(id);
-          } catch {
-            /* noop */
-          }
-          return;
-        }
-        idRef.current = id;
+      } catch {
+        /* noop */
+      }
+    };
+
+    const clear = async () => {
+      try {
+        await Notifications.dismissNotificationAsync(NOTIF_ID);
+      } catch {
+        /* noop */
+      }
+      try {
+        await Notifications.cancelScheduledNotificationAsync(NOTIF_ID);
       } catch {
         /* noop */
       }
@@ -97,9 +103,7 @@ export function useRadioNotification(
   // Al desmontar la pantalla, quitar la notificación.
   useEffect(
     () => () => {
-      if (!idRef.current) return;
-      Notifications.dismissNotificationAsync(idRef.current).catch(() => {});
-      idRef.current = null;
+      Notifications.dismissNotificationAsync(NOTIF_ID).catch(() => {});
     },
     [],
   );
