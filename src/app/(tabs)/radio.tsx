@@ -104,12 +104,13 @@ export default function RadioScreen() {
   const latchedRef = useRef(false);
 
   const onPttIn = () => {
-    if (latchedRef.current) {
-      // Estaba fijado por un toque: este toque lo corta.
+    if (latchedRef.current && talking) {
+      // Estaba fijado por un toque Y transmitiendo: este toque lo corta.
       latchedRef.current = false;
       void stopTalking();
       return;
     }
+    latchedRef.current = false; // limpia un latch viejo o de un intento fallido
     // Half-duplex: si otro tiene la palabra, no interrumpimos. Hay que esperar a
     // que termine (el pitido de fin avisa cuándo queda libre el canal).
     if (speaking) {

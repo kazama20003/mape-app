@@ -30,14 +30,15 @@ export function useRadioNotification(
 
     const show = async () => {
       try {
+        // El canal se (re)crea siempre (idempotente): si el SO lo borró, vuelve.
+        if (Platform.OS === 'android') {
+          await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL, {
+            name: 'Radio en vivo',
+            // LOW: no suena ni vibra al actualizar el estado.
+            importance: Notifications.AndroidImportance.LOW,
+          });
+        }
         if (!setupReady) {
-          if (Platform.OS === 'android') {
-            await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL, {
-              name: 'Radio en vivo',
-              // LOW: no suena ni vibra al actualizar el estado.
-              importance: Notifications.AndroidImportance.LOW,
-            });
-          }
           await Notifications.setNotificationCategoryAsync(CATEGORY, [
             {
               identifier: 'HABLAR',

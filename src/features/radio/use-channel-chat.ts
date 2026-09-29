@@ -99,15 +99,25 @@ export function useChannelChat(channelId: string | undefined) {
       // Si la nota está PRE-CARGADA, suena al instante (sin esperar el buffer).
       if (preloadRef.current?.key === audioKey) {
         playerRef.current?.remove();
-        playerRef.current = preloadRef.current.player;
-        preloadRef.current = null; // se consume; el efecto recargará la última
-        playerRef.current.volume = 1;
+        const p = preloadRef.current.player;
+        preloadRef.current = null;
+        playerRef.current = p;
+        p.volume = 1;
         try {
-          playerRef.current.seekTo(0);
+          p.seekTo(0);
         } catch {
           /* noop */
         }
-        playerRef.current.play();
+        p.play();
+        // Re-pre-carga la MISMA nota para que una 2.ª reproducción seguida
+        // también sea instantánea.
+        try {
+          const np = createAudioPlayer(url);
+          np.volume = 1;
+          preloadRef.current = { key: audioKey, player: np };
+        } catch {
+          /* noop */
+        }
         return;
       }
       playerRef.current?.remove();

@@ -72,6 +72,7 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
     const socket = getSocket('/radio', token);
     let cancelled = false;
     let settingUp = false;
+    let pendingSetup = false;
     let connectedOnce = socket.connected;
 
     // Sesión de audio de comunicación (volumen propio de la app, sin tocar el
@@ -154,7 +155,12 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
     };
 
     const setup = async () => {
-      if (settingUp) return; // evita montajes solapados si 'connect' se repite
+      // Si ya hay un montaje en curso, no lo solapamos; marcamos que hace falta
+      // re-montar al terminar (p.ej. si llegó una reconexión durante el montaje).
+      if (settingUp) {
+        pendingSetup = true;
+        return;
+      }
       settingUp = true;
       try {
         // Partimos de cero: al reconectar, los transportes viejos ya no sirven.
@@ -236,6 +242,11 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
         /* noop */
       } finally {
         settingUp = false;
+        // Si se pidió re-montar mientras montábamos (reconexión), hacerlo ahora.
+        if (pendingSetup && !cancelled) {
+          pendingSetup = false;
+          void setup();
+        }
       }
     };
 
