@@ -10,6 +10,7 @@ type Transport = msTypes.Transport;
 
 import { useAuth } from '@/features/auth/auth-context';
 import { getSocket } from '@/lib/socket';
+import { playEndBeep, playStartBeep } from '@/features/radio/beeps';
 import type { Socket } from 'socket.io-client';
 
 // react-native-webrtc expone los objetos WebRTC globales que mediasoup-client usa.
@@ -80,6 +81,7 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
         consumersRef.current.set(consumer.id, consumer);
         await ack(socket, 'ms:resume', { consumerId: consumer.id });
         setSpeaking(true);
+        playStartBeep(); // señal: alguien empezó a hablar
       } catch {
         /* noop */
       }
@@ -164,6 +166,42 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
         const current = await ack<any>(socket, 'ms:getProducer', { channelId });
         if (cancelled) return;
         if (current?.producerId) await consume(current.producerId);
+
+        // PRE-ARMAR el envío: transporte de salida + micrófono listos desde ya,
+        // para que al presionar HABLAR se transmita AL INSTANTE (0 desfase). El
+        // micrófono queda abierto solo mientras estás en la vista de radio; se
+        // libera al salir (teardownLocal).
+        try {
+          const sendParams = await ack<any>(socket, 'ms:createTransport', {
+            direction: 'send',
+          });
+          if (cancelled) return;
+          const send = device.createSendTransport(sendParams);
+          send.on('connect', ({ dtlsParameters }, cb, errb) => {
+            ack(socket, 'ms:connectTransport', { direction: 'send', dtlsParameters })
+              .then(() => cb())
+              .catch(errb);
+          });
+          send.on('produce', ({ rtpParameters }, cb, errb) => {
+            ack<any>(socket, 'ms:produce', { channelId, rtpParameters })
+              .then((r) =>
+                r?.id ? cb({ id: r.id }) : errb(new Error(r?.error ?? 'no id')),
+              )
+              .catch(errb);
+          });
+          sendRef.current = send;
+          const stream = await mediaDevices.getUserMedia({
+            audio: true,
+            video: false,
+          });
+          if (cancelled) {
+            stream.getTracks().forEach((t) => t.stop());
+            return;
+          }
+          localStreamRef.current = stream;
+        } catch {
+          // sin permiso de micrófono: se intentará abrir al presionar HABLAR
+        }
       } catch {
         /* noop */
       } finally {
@@ -176,6 +214,7 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
       consumersRef.current.forEach((c) => c.close());
       consumersRef.current.clear();
       setSpeaking(false);
+      playEndBeep(); // señal: el otro terminó de hablar (canal libre)
     };
     // La primera conexión ya la monta el setup() inicial de abajo; solo volvemos
     // a montar en las RE-conexiones, para recuperar el audio tras un corte.
@@ -218,8 +257,11 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
     if (!device) return;
     const socket = getSocket('/radio', token);
     setTalking(true);
+    // Pitido en paralelo; el envío ya está PRE-ARMADO, así que transmitir es
+    // instantáneo (no se abre el micrófono en este momento -> 0 desfase).
+    playStartBeep();
     try {
-      // Transporte de envío (una vez por sesión; se recrea tras reconexión).
+      // Fallback por si el pre-armado no alcanzó a montarse (o falló el permiso).
       if (!sendRef.current) {
         const sendParams = await ack<any>(socket, 'ms:createTransport', {
           direction: 'send',
@@ -232,23 +274,34 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
         });
         send.on('produce', ({ rtpParameters }, cb, errb) => {
           ack<any>(socket, 'ms:produce', { channelId, rtpParameters })
-            .then((r) => (r?.id ? cb({ id: r.id }) : errb(new Error('no id'))))
+            .then((r) =>
+              r?.id ? cb({ id: r.id }) : errb(new Error(r?.error ?? 'no id')),
+            )
             .catch(errb);
         });
         sendRef.current = send;
       }
-      const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
-      localStreamRef.current = stream;
-      const track = stream.getAudioTracks()[0];
+      if (!localStreamRef.current) {
+        localStreamRef.current = await mediaDevices.getUserMedia({
+          audio: true,
+          video: false,
+        });
+      }
+      const track = localStreamRef.current.getAudioTracks()[0];
       // react-native-webrtc y mediasoup-client difieren en el tipo del track,
       // pero registerGlobals los hace compatibles en runtime.
       producerRef.current = await sendRef.current.produce({
         track: track as unknown as MediaStreamTrack,
       });
     } catch {
-      // Si algo falla, liberar el micrófono: nunca debe quedar abierto sin hablar.
-      localStreamRef.current?.getTracks().forEach((t) => t.stop());
-      localStreamRef.current = null;
+      // Falló (canal ocupado / sin permiso): no transmitimos. El track pre-armado
+      // se mantiene listo; solo cerramos el productor a medias.
+      try {
+        producerRef.current?.close();
+      } catch {
+        /* noop */
+      }
+      producerRef.current = null;
       setTalking(false);
     }
   }, [channelId, token, talking]);
@@ -256,14 +309,15 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
   const stopTalking = useCallback(() => {
     if (!channelId || !token) return;
     const socket = getSocket('/radio', token);
+    playEndBeep(); // señal "roger": terminaste de hablar
     try {
       producerRef.current?.close();
     } catch {
       /* noop */
     }
     producerRef.current = null;
-    localStreamRef.current?.getTracks().forEach((t) => t.stop());
-    localStreamRef.current = null;
+    // NO detenemos el track: el micrófono queda PRE-ARMADO para volver a hablar
+    // al instante. Se libera al salir de la vista de radio (teardownLocal).
     socket.emit('ms:closeProducer');
     setTalking(false);
   }, [channelId, token]);

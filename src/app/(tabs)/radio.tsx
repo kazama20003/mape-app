@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -16,7 +16,7 @@ import { useAuth } from '@/features/auth/auth-context';
 import { useChannels } from '@/features/data/hooks';
 import { useChannelChat } from '@/features/radio/use-channel-chat';
 import { useRadioSfu } from '@/features/radio/use-radio-sfu';
-import { playEndBeep, playStartBeep } from '@/features/radio/beeps';
+import { playEndBeep } from '@/features/radio/beeps';
 import { useRadioNotification } from '@/features/radio/use-radio-notification';
 
 const SPEAKER_BARS = [8, 18, 26, 12, 22, 10, 16];
@@ -66,16 +66,6 @@ export default function RadioScreen() {
       params: { id: activeChannel.id, name: channelNames[channel] },
     });
   };
-
-  // Pitidos walkie-talkie: tono ALTO al empezar (alguien toma la palabra) y tono
-  // BAJO ("roger") al terminar. Cubre a quien habla y a quienes escuchan.
-  const prevActiveRef = useRef(false);
-  useEffect(() => {
-    const a = talking || speaking;
-    if (a && !prevActiveRef.current) playStartBeep();
-    else if (!a && prevActiveRef.current) playEndBeep();
-    prevActiveRef.current = a;
-  }, [talking, speaking]);
 
   // Notificación persistente del canal: estado + botón "Hablar" (abre la app).
   const radioStatus = talking

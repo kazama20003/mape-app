@@ -27,6 +27,20 @@ function fmtDur(sec: number): string {
   return `0:${String(s).padStart(2, '0')}`;
 }
 
+/** Hora del mensaje: "14:30" si es hoy, "28/09 14:30" si es otro día. */
+function fmtWhen(at?: string | null): string {
+  if (!at) return '';
+  const d = new Date(at);
+  if (isNaN(d.getTime())) return '';
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const sameDay = d.toDateString() === new Date().toDateString();
+  if (sameDay) return `${hh}:${mm}`;
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}/${mo} ${hh}:${mm}`;
+}
+
 export default function RadioChatScreen() {
   const insets = useSafeAreaInsets();
   const { id, name } = useLocalSearchParams<{ id?: string; name?: string }>();
@@ -97,6 +111,9 @@ export default function RadioChatScreen() {
                 <Text style={[styles.bubbleName, h.mine && styles.bubbleTextMine]}>
                   {h.mine ? 'Tú' : h.senderName}
                 </Text>
+                <Text style={[styles.bubbleTime, h.mine && styles.bubbleTextMine]}>
+                  {fmtWhen(h.at)}
+                </Text>
               </PressableScale>
             ) : h.text ? (
               <View style={[styles.textBubble, h.mine && styles.bubbleMine]}>
@@ -104,6 +121,9 @@ export default function RadioChatScreen() {
                   {h.mine ? 'Tú' : h.senderName}
                 </Text>
                 <Text style={[styles.textBody, h.mine && styles.bubbleTextMine]}>{h.text}</Text>
+                <Text style={[styles.bubbleTime, h.mine && styles.bubbleTextMine]}>
+                  {fmtWhen(h.at)}
+                </Text>
               </View>
             ) : (
               <PressableScale
@@ -119,6 +139,7 @@ export default function RadioChatScreen() {
                   </Text>
                   <Text style={[styles.bubbleMeta, h.mine && styles.bubbleTextMine]}>
                     Nota de voz · {fmtDur(h.durationSec)}
+                    {fmtWhen(h.at) ? ` · ${fmtWhen(h.at)}` : ''}
                   </Text>
                 </View>
               </PressableScale>
@@ -208,6 +229,13 @@ const styles = StyleSheet.create({
   chatImg: { width: 200, height: 200, borderRadius: 12, backgroundColor: Mape.border },
   bubbleName: { fontSize: 13, fontFamily: Font.semibold, color: Mape.ink, paddingHorizontal: 2 },
   bubbleMeta: { fontSize: 12, fontFamily: Font.regular, color: Mape.textMuted },
+  bubbleTime: {
+    fontSize: 10,
+    fontFamily: Font.regular,
+    color: Mape.textFaint,
+    paddingHorizontal: 2,
+    marginTop: 1,
+  },
   bubbleTextMine: { color: Mape.white },
   textBubble: {
     maxWidth: '80%',
