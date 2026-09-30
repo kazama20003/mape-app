@@ -248,22 +248,35 @@ export default function RadioScreen() {
           Mantén presionado o toca una vez para transmitir
         </Text>
 
-        {/* Acciones */}
-        <Animated.View style={styles.actions} entering={rise(3)}>
+        {/* Salida de audio: control segmentado, la opción activa queda resaltada
+            para que se vea sin ambigüedad cuál está en uso. */}
+        <Animated.View style={styles.outputRow} entering={rise(3)}>
           <PressableScale
-            style={[styles.actionBtn, speakerOn && styles.actionBtnActive]}
-            onPress={() => setSpeakerOn((v) => !v)}
-            accessibilityLabel="Alternar altavoz o normal">
+            style={[styles.segBtn, speakerOn && styles.segBtnActive]}
+            onPress={() => setSpeakerOn(true)}
+            accessibilityLabel="Salida por altavoz">
             <Icon
               name="speaker"
-              size={18}
+              size={16}
               color={speakerOn ? Mape.white : Mape.ink}
               strokeWidth={1.8}
             />
-            <Text style={[styles.actionText, speakerOn && styles.actionTextActive]}>
-              {speakerOn ? 'Altavoz' : 'Normal'}
+            <Text style={[styles.segText, speakerOn && styles.segTextActive]}>
+              Altavoz
             </Text>
           </PressableScale>
+          <PressableScale
+            style={[styles.segBtn, !speakerOn && styles.segBtnActive]}
+            onPress={() => setSpeakerOn(false)}
+            accessibilityLabel="Salida por auricular o Bluetooth">
+            <Text style={[styles.segText, !speakerOn && styles.segTextActive]}>
+              Auricular / BT
+            </Text>
+          </PressableScale>
+        </Animated.View>
+
+        {/* Acciones */}
+        <Animated.View style={styles.actions} entering={rise(4)}>
           <PressableScale
             style={[styles.actionBtn, !hasLastAudio && styles.actionBtnOff]}
             onPress={() => hasLastAudio && void playLast()}
@@ -406,6 +419,27 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   replayText: { fontSize: 13, color: Mape.ink, fontFamily: Font.semibold },
+
+  outputRow: {
+    flexDirection: 'row',
+    width: '100%',
+    backgroundColor: Mape.white,
+    borderRadius: 24,
+    padding: 4,
+    gap: 4,
+  },
+  segBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  segBtnActive: { backgroundColor: Mape.ink },
+  segText: { fontSize: 14, color: Mape.ink, fontFamily: Font.semibold },
+  segTextActive: { color: Mape.white },
 
   actions: { flexDirection: 'row', gap: 10, width: '100%' },
   actionBtn: {

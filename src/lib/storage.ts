@@ -13,4 +13,5 @@ export const StorageKeys = {
   user: 'mape.user',
   lastRoute: 'mape.lastRoute',
   bgPermAsked: 'mape.bgPermAsked',
+  autostartAsked: 'mape.autostartAsked',
 } as const;
