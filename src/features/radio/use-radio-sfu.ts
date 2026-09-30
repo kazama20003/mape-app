@@ -96,33 +96,35 @@ export function useRadioSfu(
   //               auricular del teléfono.
   const applyRoute = useCallback(() => {
     try {
-      if (speakerRef.current) {
-        // Altavoz: re-aplicar es barato (no toca SCO) y corrige el desfase de
-        // arranque, así que no deduplicamos.
-        InCallManager.setForceSpeakerphoneOn(true);
-        void InCallManager.chooseAudioRoute('SPEAKER_PHONE').catch(() => {});
-        lastRouteRef.current = 'SPEAKER_PHONE';
-        setOutputDevice('speaker');
-      } else {
-        InCallManager.setForceSpeakerphoneOn(false);
-        const desired = devicesRef.current.bt
+      const desired = speakerRef.current
+        ? 'SPEAKER_PHONE'
+        : devicesRef.current.bt
           ? 'BLUETOOTH'
           : devicesRef.current.wired
             ? 'WIRED_HEADSET'
             : 'EARPIECE';
-        // Solo cambiar si el destino cambió: re-elegir la MISMA ruta (sobre todo
-        // Bluetooth) reinicia el SCO y produce el corte/lag continuo.
-        if (desired === lastRouteRef.current) return;
-        lastRouteRef.current = desired;
-        void InCallManager.chooseAudioRoute(desired).catch(() => {});
-        setOutputDevice(
-          desired === 'BLUETOOTH'
+      // Dedup en TODAS las rutas (incluido Altavoz). Re-emitir la MISMA ruta
+      // reinicia el SCO (en Bluetooth) o dispara otro onAudioDeviceChanged (en
+      // Altavoz, porque chooseAudioRoute cambia el dispositivo activo). Como el
+      // listener onAudioDeviceChanged vuelve a llamar applyRoute, sin dedup se
+      // formaba un BUCLE de re-ruteo: el audio "cambiaba a cada rato" y a veces
+      // se iba al audífono Bluetooth aunque estuviera en Altavoz. Si el destino
+      // no cambió, no tocamos nada y el bucle se corta.
+      if (desired === lastRouteRef.current) return;
+      lastRouteRef.current = desired;
+      // Forzar el parlante SOLO cuando la ruta elegida es el altavoz; apagar el
+      // force en cualquier otra, si no el force-speaker le gana a BT/cable/auricular.
+      InCallManager.setForceSpeakerphoneOn(desired === 'SPEAKER_PHONE');
+      void InCallManager.chooseAudioRoute(desired).catch(() => {});
+      setOutputDevice(
+        desired === 'SPEAKER_PHONE'
+          ? 'speaker'
+          : desired === 'BLUETOOTH'
             ? 'bluetooth'
             : desired === 'WIRED_HEADSET'
               ? 'wired'
               : 'earpiece',
-        );
-      }
+      );
     } catch {
       /* noop */
     }

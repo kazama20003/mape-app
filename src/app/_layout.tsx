@@ -22,7 +22,7 @@ import { storage, StorageKeys } from '@/lib/storage';
 
 import { AuthProvider, useAuth } from '@/features/auth/auth-context';
 import { usePushRegistration } from '@/features/notifications/use-push-registration';
-import { useStartupPermissions } from '@/features/radio/use-startup-permissions';
+import { PermissionGate } from '@/features/permissions/permission-gate';
 import { useBackgroundPermission } from '@/features/radio/use-background-permission';
 import { useChatRealtime } from '@/features/data/hooks';
 import { SettingsProvider } from '@/features/settings/settings-context';
@@ -82,7 +82,6 @@ function AuthGate() {
   }, [pathname, segments, status]);
 
   usePushRegistration();
-  useStartupPermissions(status === 'authenticated');
   useBackgroundPermission(status === 'authenticated');
   useChatRealtime();
 
@@ -190,7 +189,9 @@ export default function RootLayout() {
           <SettingsProvider>
             <AuthProvider>
               <StatusBar style="dark" />
-              <AuthGate />
+              <PermissionGate>
+                <AuthGate />
+              </PermissionGate>
               <OfflineBanner />
             </AuthProvider>
           </SettingsProvider>
