@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, DeviceEventEmitter } from 'react-native';
-import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
+import { setAudioModeAsync } from 'expo-audio';
 import InCallManager from 'react-native-incall-manager';
 import { Device, type types as msTypes } from 'mediasoup-client';
 import { mediaDevices, registerGlobals, type MediaStream } from 'react-native-webrtc';
@@ -12,6 +12,10 @@ type Transport = msTypes.Transport;
 import { useAuth } from '@/features/auth/auth-context';
 import { getSocket } from '@/lib/socket';
 import { playEndBeep, playStartBeep } from '@/features/radio/beeps';
+import {
+  startKeepAliveService,
+  stopKeepAliveService,
+} from '@/features/radio/keep-alive';
 import type { Socket } from 'socket.io-client';
 
 // react-native-webrtc expone los objetos WebRTC globales que mediasoup-client usa.
@@ -75,9 +79,6 @@ export function useRadioSfu(
   const wantsTalkRef = useRef(false);
   const localStreamRef = useRef<MediaStream | null>(null);
   const consumersRef = useRef<Map<string, Consumer>>(new Map());
-  // Reproductor de silencio en loop: mantiene vivo el foreground service de audio
-  // para que el audio en vivo (WebRTC) siga sonando con la app en 2.º plano.
-  const keepAliveRef = useRef<AudioPlayer | null>(null);
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
   const speakerRef = useRef(speaker);
@@ -360,6 +361,9 @@ export function useRadioSfu(
   const radioActive = !!token && !!channelId;
   useEffect(() => {
     if (!radioActive) return;
+    // Foreground service nativo (tipo micrófono) para sobrevivir en 2do plano
+    // sin tocar el ruteo de audio (ver keep-alive.ts / RadioKeepAliveService.kt).
+    startKeepAliveService();
     try {
       InCallManager.start({ media: 'audio' });
     } catch {
@@ -400,30 +404,16 @@ export function useRadioSfu(
       } catch {
         /* noop */
       }
-      try {
-        const ka = createAudioPlayer(require('../../../assets/silence.wav'));
-        ka.loop = true;
-        ka.volume = 0;
-        ka.play();
-        keepAliveRef.current = ka;
-        // NOTA: NO usamos setActiveForLockScreen aquí. Activaría una MediaSession
-        // que reproduce por el stream de música (A2DP en Bluetooth) y entra en
-        // conflicto con el audio de voz (SCO) -> lag y cortes al rutear al
-        // audífono BT. El proceso se mantiene vivo en 2do plano con el
-        // foreground service de UBICACIÓN, que no toca el ruteo de audio.
-      } catch {
-        /* noop */
-      }
     })();
+    // NOTA: ya NO usamos un reproductor de silencio como keepalive. Reproducir
+    // audio (aunque sea a volumen 0) usa el stream de música y en Bluetooth
+    // fuerza A2DP, que choca con la voz por SCO (lag/cortes). El proceso se
+    // mantiene vivo en 2do plano con el foreground service nativo tipo micrófono
+    // (startKeepAliveService), que NO toca el ruteo de audio.
     return () => {
       routeTimers.forEach(clearTimeout);
       deviceSub.remove();
-      try {
-        keepAliveRef.current?.remove();
-      } catch {
-        /* noop */
-      }
-      keepAliveRef.current = null;
+      stopKeepAliveService();
       try {
         InCallManager.setForceSpeakerphoneOn(false);
         InCallManager.stop();
