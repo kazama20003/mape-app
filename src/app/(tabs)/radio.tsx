@@ -1,7 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import InCallManager from 'react-native-incall-manager';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Animated from 'react-native-reanimated';
@@ -62,7 +61,7 @@ export default function RadioScreen() {
   // desconectado (botón de la notificación), no se monta la sesión (channelId
   // undefined -> se libera el audio).
   const { talking, speaking, startTalking, stopTalking, connected, txFailed } =
-    useRadioSfu(disconnected ? undefined : activeChannel?.id, false);
+    useRadioSfu(disconnected ? undefined : activeChannel?.id, false, speakerOn);
 
   // Historial del canal (para reescuchar el último audio guardado).
   const { messages, playAudio } = useChannelChat(activeChannel?.id);
@@ -92,29 +91,8 @@ export default function RadioScreen() {
     radioStatus,
   );
 
-  // Aplica el ruteo según el botón: Altavoz fuerza el parlante; Normal no fuerza
-  // (suena en audífono si hay, si no en el auricular).
-  useEffect(() => {
-    if (!activeChannel || disconnected) return;
-    const apply = () => {
-      try {
-        if (speakerOn) {
-          // Fuerza el ALTAVOZ del teléfono, incluso con audífono conectado
-          // (setForceSpeakerphoneOn solo no basta sobre un audífono con cable).
-          InCallManager.setForceSpeakerphoneOn(true);
-          void InCallManager.chooseAudioRoute('SPEAKER_PHONE').catch(() => {});
-        } else {
-          // Normal: sin forzar -> suena en el audífono si hay, si no en el auricular.
-          InCallManager.setForceSpeakerphoneOn(false);
-        }
-      } catch {
-        /* noop */
-      }
-    };
-    apply();
-    const t = setTimeout(apply, 400); // re-aplica por si InCallManager tardó en iniciar
-    return () => clearTimeout(t);
-  }, [speakerOn, activeChannel, disconnected]);
+  // (El ruteo Altavoz/Normal lo maneja useRadioSfu: lo aplica tras iniciar la
+  // sesión de audio y lo re-aplica para vencer el reset de InCallManager.start.)
 
   // Hablar MANTENIENDO presionado o con un TOQUE (queda fijado hasta el próximo
   // toque). Usamos refs para no depender del estado async dentro del gesto.

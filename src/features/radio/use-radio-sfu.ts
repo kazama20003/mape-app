@@ -49,7 +49,11 @@ const ack = <T = any>(
  * transportes de esa sesión. Por eso volvemos a montar TODA la sesión de audio
  * en cada evento `connect`; así la radio se recupera sola en vez de quedar muda.
  */
-export function useRadioSfu(channelId: string | undefined, muted: boolean) {
+export function useRadioSfu(
+  channelId: string | undefined,
+  muted: boolean,
+  speaker = true,
+) {
   const { token } = useAuth();
   const [talking, setTalking] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -71,6 +75,23 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
   const keepAliveRef = useRef<AudioPlayer | null>(null);
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
+  const speakerRef = useRef(speaker);
+  speakerRef.current = speaker;
+
+  // Aplica el ruteo de salida según el botón (Altavoz fuerza el parlante aunque
+  // el sistema prefiera otra ruta; Normal deja el ruteo automático = auricular).
+  const applyRoute = useCallback(() => {
+    try {
+      if (speakerRef.current) {
+        InCallManager.setForceSpeakerphoneOn(true);
+        void InCallManager.chooseAudioRoute('SPEAKER_PHONE').catch(() => {});
+      } else {
+        InCallManager.setForceSpeakerphoneOn(false);
+      }
+    } catch {
+      /* noop */
+    }
+  }, []);
 
   useEffect(() => {
     if (!token || !channelId) return;
@@ -298,6 +319,13 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
     } catch {
       /* noop */
     }
+    // Aplica la ruta AHORA y varias veces después: InCallManager.start() resetea
+    // la ruta a "auto" con un retardo interno, así que re-aplicamos para que el
+    // Altavoz (o Normal) quede fijo desde el inicio (sin el desfase del arranque).
+    applyRoute();
+    const routeTimers = [300, 900, 1800, 3000].map((ms) =>
+      setTimeout(applyRoute, ms),
+    );
     void (async () => {
       try {
         await setAudioModeAsync({
@@ -318,6 +346,7 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
       }
     })();
     return () => {
+      routeTimers.forEach(clearTimeout);
       try {
         keepAliveRef.current?.remove();
       } catch {
@@ -331,7 +360,12 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
         /* noop */
       }
     };
-  }, [radioActive]);
+  }, [radioActive, applyRoute]);
+
+  // Re-aplica la ruta cuando el usuario cambia Altavoz/Normal.
+  useEffect(() => {
+    if (radioActive) applyRoute();
+  }, [speaker, radioActive, applyRoute]);
 
   // Silencio (mute): pausa/reanuda la reproducción de los consumers en curso,
   // sin desconectar. Así el botón de silencio afecta al audio que ya está sonando.
