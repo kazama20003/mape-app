@@ -10,7 +10,13 @@ export interface LatLng {
 }
 
 export interface Guide {
-  route: { polyline: string; distanceText: string; durationText: string };
+  route: {
+    polyline: string;
+    distanceText: string;
+    durationText: string;
+    durationInTrafficText?: string;
+    hasTraffic?: boolean;
+  };
   origin: { lat: number; lng: number };
   dest: { lat: number; lng: number; name?: string };
   assignedBy?: string;

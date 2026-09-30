@@ -542,7 +542,9 @@ export default function MapaScreen() {
                     Ruta{myGuide.assignedBy ? ` de ${myGuide.assignedBy}` : ''}
                   </Text>
                   <Text style={styles.guideMeta}>
-                    {myGuide.route.distanceText} · {myGuide.route.durationText}
+                    {myGuide.route.distanceText} ·{' '}
+                    {myGuide.route.durationInTrafficText || myGuide.route.durationText}
+                    {myGuide.route.hasTraffic ? ' · ⚠ tráfico' : ''}
                   </Text>
                 </View>
                 <PressableScale
@@ -561,7 +563,9 @@ export default function MapaScreen() {
                     Ruta enviada{assigned.dest.name ? ` a ${assigned.dest.name}` : ''}
                   </Text>
                   <Text style={styles.guideMeta}>
-                    {assigned.route.distanceText} · {assigned.route.durationText}
+                    {assigned.route.distanceText} ·{' '}
+                    {assigned.route.durationInTrafficText || assigned.route.durationText}
+                    {assigned.route.hasTraffic ? ' · ⚠ tráfico' : ''}
                   </Text>
                 </View>
                 <PressableScale
