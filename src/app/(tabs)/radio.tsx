@@ -61,10 +61,8 @@ export default function RadioScreen() {
   // Audio EN VIVO por SFU (mediasoup): hablar/escuchar en tiempo real. Si está
   // desconectado (botón de la notificación), no se monta la sesión (channelId
   // undefined -> se libera el audio).
-  const { talking, speaking, startTalking, stopTalking } = useRadioSfu(
-    disconnected ? undefined : activeChannel?.id,
-    false, // la radio no se silencia
-  );
+  const { talking, speaking, startTalking, stopTalking, connected, txFailed } =
+    useRadioSfu(disconnected ? undefined : activeChannel?.id, false);
 
   // Historial del canal (para reescuchar el último audio guardado).
   const { messages, playAudio } = useChannelChat(activeChannel?.id);
@@ -227,6 +225,16 @@ export default function RadioScreen() {
               </View>
               <Waveform heights={SPEAKER_BARS} color={Mape.red} style={{ marginLeft: 6 }} />
             </>
+          ) : activeChannel && !disconnected && !connected ? (
+            <View style={styles.gap1}>
+              <Text style={styles.speakingLabel}>CONEXIÓN</Text>
+              <Text style={styles.speakingName}>Reconectando… revisa tu internet</Text>
+            </View>
+          ) : txFailed ? (
+            <View style={styles.gap1}>
+              <Text style={styles.speakingLabel}>ERROR</Text>
+              <Text style={styles.speakingName}>No se pudo transmitir, reintenta</Text>
+            </View>
           ) : (
             <View style={styles.gap1}>
               <Text style={styles.speakingLabel}>CANAL</Text>

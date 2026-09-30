@@ -53,6 +53,8 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
   const { token } = useAuth();
   const [talking, setTalking] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [connected, setConnected] = useState(false); // socket vivo (internet)
+  const [txFailed, setTxFailed] = useState(false); // la última transmisión falló
 
   const deviceRef = useRef<Device | null>(null);
   const recvRef = useRef<Transport | null>(null);
@@ -253,11 +255,16 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
     // La primera conexión ya la monta el setup() inicial de abajo; solo volvemos
     // a montar en las RE-conexiones, para recuperar el audio tras un corte.
     const onConnect = () => {
+      setConnected(true);
       if (connectedOnce) void setup();
       else connectedOnce = true;
     };
     // Al caerse: soltamos el estado local muerto (el server ya lo liberó).
-    const onDisconnect = () => teardownLocal();
+    const onDisconnect = () => {
+      setConnected(false);
+      teardownLocal();
+    };
+    setConnected(socket.connected);
 
     socket.on('ms:newProducer', onNewProducer);
     socket.on('ms:producerClosed', onProducerClosed);
@@ -346,6 +353,7 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
     const socket = getSocket('/radio', token);
     setTalking(true);
     wantsTalkRef.current = true;
+    setTxFailed(false);
     // Pitido en paralelo; el envío ya está PRE-ARMADO, así que transmitir es
     // instantáneo (no se abre el micrófono en este momento -> 0 desfase).
     playStartBeep();
@@ -416,6 +424,7 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
       } catch {
         producerRef.current = null;
         setTalking(false);
+        setTxFailed(true); // no se pudo transmitir (se avisa en pantalla)
       }
     }
   }, [channelId, token, talking]);
@@ -437,5 +446,5 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
     setTalking(false);
   }, [channelId, token]);
 
-  return { talking, speaking, startTalking, stopTalking };
+  return { talking, speaking, startTalking, stopTalking, connected, txFailed };
 }

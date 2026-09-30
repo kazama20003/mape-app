@@ -164,10 +164,13 @@ export function useChannelChat(channelId: string | undefined) {
   }, [messages]);
 
   const sendImage = useCallback(
-    async (uri: string) => {
+    async (uri: string, opts?: { name?: string; type?: string }) => {
       if (!channelId || !token) return;
       try {
-        const up = await api.upload(uri, { name: 'foto.jpg', type: 'image/jpeg' });
+        const up = await api.upload(uri, {
+          name: opts?.name ?? 'foto.jpg',
+          type: opts?.type ?? 'image/jpeg',
+        });
         getSocket('/radio', token).emit('channel:image', {
           channelId,
           imageKey: up.key,

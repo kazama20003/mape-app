@@ -58,11 +58,20 @@ export default function RadioChatScreen() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) return;
     const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ['images', 'videos'],
       quality: 0.7,
     });
-    if (!res.canceled && res.assets[0]) await sendImage(res.assets[0].uri);
+    if (res.canceled || !res.assets[0]) return;
+    const a = res.assets[0];
+    const isVideo = a.type === 'video';
+    await sendImage(a.uri, {
+      name: a.fileName ?? (isVideo ? 'video.mp4' : 'foto.jpg'),
+      type: a.mimeType ?? (isVideo ? 'video/mp4' : 'image/jpeg'),
+    });
   };
+
+  const isVideoKey = (key?: string | null) =>
+    !!key && /\.(mp4|mov|webm|mkv|3gp|m4v)$/i.test(key);
 
   return (
     <Screen style={[styles.root, { paddingTop: insets.top + 16 }]} transition="push">
@@ -102,12 +111,19 @@ export default function RadioChatScreen() {
                   if (u) void Linking.openURL(u);
                 }}
                 style={[styles.imgBubble, h.mine && styles.bubbleMine]}
-                accessibilityLabel="Ver imagen">
-                <Image
-                  source={{ uri: mediaUrl(h.imageKey) ?? undefined }}
-                  style={styles.chatImg}
-                  contentFit="cover"
-                />
+                accessibilityLabel="Ver imagen o video">
+                {isVideoKey(h.imageKey) ? (
+                  <View style={[styles.chatImg, styles.videoBox]}>
+                    <Icon name="play" size={30} color={Mape.white} strokeWidth={2} />
+                    <Text style={styles.videoLabel}>Video</Text>
+                  </View>
+                ) : (
+                  <Image
+                    source={{ uri: mediaUrl(h.imageKey) ?? undefined }}
+                    style={styles.chatImg}
+                    contentFit="cover"
+                  />
+                )}
                 <Text style={[styles.bubbleName, h.mine && styles.bubbleTextMine]}>
                   {h.mine ? 'Tú' : h.senderName}
                 </Text>
@@ -246,6 +262,13 @@ const styles = StyleSheet.create({
   voicePlayMine: { backgroundColor: Mape.white },
   voicePlayOn: { backgroundColor: Mape.red },
   chatImg: { width: 200, height: 200, borderRadius: 12, backgroundColor: Mape.border },
+  videoBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#1A1A1A',
+  },
+  videoLabel: { color: Mape.white, fontSize: 12, fontFamily: Font.semibold },
   bubbleName: { fontSize: 13, fontFamily: Font.semibold, color: Mape.ink, paddingHorizontal: 2 },
   bubbleMeta: { fontSize: 12, fontFamily: Font.regular, color: Mape.textMuted },
   bubbleTime: {
