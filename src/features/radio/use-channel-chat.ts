@@ -33,6 +33,9 @@ export function useChannelChat(channelId: string | undefined) {
   // Reproductor pre-cargado de la última nota de voz (para que "Último" suene al
   // instante, sin esperar el buffer al presionar).
   const preloadRef = useRef<{ key: string; player: AudioPlayer } | null>(null);
+  // Nota que se está reproduciendo ahora (para el indicador visual "sonando").
+  const [playingKey, setPlayingKey] = useState<string | null>(null);
+  const playTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const mapTx = useCallback(
     (t: RawTx): RadioTransmission => ({
@@ -85,7 +88,8 @@ export function useChannelChat(channelId: string | undefined) {
     };
   }, [channelId, token, mapTx]);
 
-  const playAudio = useCallback(async (audioKey?: string | null) => {
+  const playAudio = useCallback(
+    async (audioKey?: string | null, durationSec?: number) => {
     const url = mediaUrl(audioKey);
     if (!url || !audioKey) return;
     try {
@@ -96,6 +100,13 @@ export function useChannelChat(channelId: string | undefined) {
         shouldPlayInBackground: true,
         interruptionMode: 'doNotMix',
       });
+      // Marca "reproduciendo" y lo limpia al terminar (según la duración).
+      setPlayingKey(audioKey);
+      if (playTimerRef.current) clearTimeout(playTimerRef.current);
+      playTimerRef.current = setTimeout(
+        () => setPlayingKey((k) => (k === audioKey ? null : k)),
+        Math.max(1, durationSec ?? 3) * 1000 + 600,
+      );
       // Si la nota está PRE-CARGADA, suena al instante (sin esperar el buffer).
       if (preloadRef.current?.key === audioKey) {
         playerRef.current?.remove();
@@ -181,9 +192,10 @@ export function useChannelChat(channelId: string | undefined) {
     () => () => {
       playerRef.current?.remove();
       preloadRef.current?.player.remove();
+      if (playTimerRef.current) clearTimeout(playTimerRef.current);
     },
     [],
   );
 
-  return { messages, playAudio, sendImage, sendText };
+  return { messages, playAudio, sendImage, sendText, playingKey };
 }

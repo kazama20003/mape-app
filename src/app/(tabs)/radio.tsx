@@ -71,7 +71,7 @@ export default function RadioScreen() {
   const hasLastAudio = messages.some((m) => m.audioKey);
   const playLast = () => {
     const last = messages.find((m) => m.audioKey);
-    if (last) void playAudio(last.audioKey);
+    if (last) void playAudio(last.audioKey, last.durationSec);
   };
 
   const openChat = () => {

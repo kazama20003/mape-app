@@ -44,7 +44,7 @@ function fmtWhen(at?: string | null): string {
 export default function RadioChatScreen() {
   const insets = useSafeAreaInsets();
   const { id, name } = useLocalSearchParams<{ id?: string; name?: string }>();
-  const { messages, playAudio, sendImage, sendText } = useChannelChat(id);
+  const { messages, playAudio, sendImage, sendText, playingKey } = useChannelChat(id);
   const [draft, setDraft] = useState('');
 
   const submit = () => {
@@ -127,19 +127,37 @@ export default function RadioChatScreen() {
               </View>
             ) : (
               <PressableScale
-                onPress={() => h.audioKey && void playAudio(h.audioKey)}
+                onPress={() => h.audioKey && void playAudio(h.audioKey, h.durationSec)}
                 style={[styles.voiceBubble, h.mine && styles.bubbleMine]}
                 accessibilityLabel="Reproducir nota de voz">
-                <View style={[styles.voicePlay, h.mine && styles.voicePlayMine]}>
-                  <Icon name="play" size={14} color={h.mine ? Mape.ink : Mape.white} />
+                <View
+                  style={[
+                    styles.voicePlay,
+                    h.mine && styles.voicePlayMine,
+                    h.audioKey === playingKey && styles.voicePlayOn,
+                  ]}>
+                  <Icon
+                    name={h.audioKey === playingKey ? 'speaker' : 'play'}
+                    size={14}
+                    color={
+                      h.audioKey === playingKey
+                        ? Mape.white
+                        : h.mine
+                          ? Mape.ink
+                          : Mape.white
+                    }
+                  />
                 </View>
                 <View style={styles.bubbleCol}>
                   <Text style={[styles.bubbleName, h.mine && styles.bubbleTextMine]}>
                     {h.mine ? 'Tú' : h.senderName}
                   </Text>
                   <Text style={[styles.bubbleMeta, h.mine && styles.bubbleTextMine]}>
-                    Nota de voz · {fmtDur(h.durationSec)}
-                    {fmtWhen(h.at) ? ` · ${fmtWhen(h.at)}` : ''}
+                    {h.audioKey === playingKey
+                      ? 'Reproduciendo…'
+                      : `Nota de voz · ${fmtDur(h.durationSec)}${
+                          fmtWhen(h.at) ? ` · ${fmtWhen(h.at)}` : ''
+                        }`}
                   </Text>
                 </View>
               </PressableScale>
@@ -226,6 +244,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   voicePlayMine: { backgroundColor: Mape.white },
+  voicePlayOn: { backgroundColor: Mape.red },
   chatImg: { width: 200, height: 200, borderRadius: 12, backgroundColor: Mape.border },
   bubbleName: { fontSize: 13, fontFamily: Font.semibold, color: Mape.ink, paddingHorizontal: 2 },
   bubbleMeta: { fontSize: 12, fontFamily: Font.regular, color: Mape.textMuted },

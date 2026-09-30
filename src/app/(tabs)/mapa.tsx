@@ -219,23 +219,13 @@ export default function MapaScreen() {
       .finally(() => setAssigning(false));
   };
 
-  // Guía OPERADOR -> OPERADOR: 1er toque elige a quién guiar; 2º toque (a otro
-  // operador en línea) fija el destino y calcula la ruta.
+  // 1) Elige a QUÉ operador guiar (toca su marcador).
   const onSelectPerson = (p: LocatedPerson) => {
-    if (!targetPerson) {
-      setTargetPerson(p);
-    } else if (targetPerson.id === p.id) {
-      setTargetPerson(null); // tocar el mismo = deseleccionar
-    } else {
-      doAssign(targetPerson, {
-        lat: p.lastLat,
-        lng: p.lastLng,
-        name: personLabel(p),
-      });
-    }
+    setTargetPerson((t) => (t?.id === p.id ? null : p));
   };
 
-  // (Opcional) tocar un punto libre del mapa como destino.
+  // 2) Toca el DESTINO en el mapa: se calcula la ruta para que ESE operador
+  //    llegue a ese punto.
   const onMapPress = (e: MapPressEvent) => {
     if (!targetPerson) return;
     const { latitude, longitude } = e.nativeEvent.coordinate;
@@ -541,8 +531,7 @@ export default function MapaScreen() {
             {targetPerson ? (
               <>
                 <Text style={[styles.guideText, { flex: 1 }]} numberOfLines={2}>
-                  Guiando a {personLabel(targetPerson)} — toca otro operador en
-                  línea como destino
+                  Toca el destino en el mapa para {personLabel(targetPerson)}
                 </Text>
                 <PressableScale
                   style={styles.guideBtnGhost}
