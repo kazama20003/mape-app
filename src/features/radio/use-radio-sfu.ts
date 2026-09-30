@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { DeviceEventEmitter } from 'react-native';
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import InCallManager from 'react-native-incall-manager';
 import { Device, type types as msTypes } from 'mediasoup-client';
@@ -77,9 +78,13 @@ export function useRadioSfu(
   mutedRef.current = muted;
   const speakerRef = useRef(speaker);
   speakerRef.current = speaker;
+  // Dispositivos de salida disponibles (se actualizan por evento de InCallManager).
+  const devicesRef = useRef({ bt: false, wired: false });
 
-  // Aplica el ruteo de salida según el botón (Altavoz fuerza el parlante aunque
-  // el sistema prefiera otra ruta; Normal deja el ruteo automático = auricular).
+  // Aplica el ruteo según el botón:
+  //  - Altavoz -> parlante del teléfono.
+  //  - Normal  -> audífono Bluetooth si hay; si no, audífono con cable; si no,
+  //               auricular del teléfono.
   const applyRoute = useCallback(() => {
     try {
       if (speakerRef.current) {
@@ -87,6 +92,12 @@ export function useRadioSfu(
         void InCallManager.chooseAudioRoute('SPEAKER_PHONE').catch(() => {});
       } else {
         InCallManager.setForceSpeakerphoneOn(false);
+        const route = devicesRef.current.bt
+          ? 'BLUETOOTH'
+          : devicesRef.current.wired
+            ? 'WIRED_HEADSET'
+            : 'EARPIECE';
+        void InCallManager.chooseAudioRoute(route).catch(() => {});
       }
     } catch {
       /* noop */
@@ -326,6 +337,25 @@ export function useRadioSfu(
     const routeTimers = [300, 900, 1800, 3000].map((ms) =>
       setTimeout(applyRoute, ms),
     );
+    // Cuando cambian los dispositivos (conectas/desconectas Bluetooth, etc.),
+    // actualizamos la lista y re-aplicamos la ruta deseada.
+    const deviceSub = DeviceEventEmitter.addListener(
+      'onAudioDeviceChanged',
+      (d: { availableAudioDeviceList?: string }) => {
+        try {
+          const list: string[] = d?.availableAudioDeviceList
+            ? JSON.parse(d.availableAudioDeviceList)
+            : [];
+          devicesRef.current = {
+            bt: list.includes('BLUETOOTH'),
+            wired: list.includes('WIRED_HEADSET'),
+          };
+        } catch {
+          /* noop */
+        }
+        applyRoute();
+      },
+    );
     void (async () => {
       try {
         await setAudioModeAsync({
@@ -347,6 +377,7 @@ export function useRadioSfu(
     })();
     return () => {
       routeTimers.forEach(clearTimeout);
+      deviceSub.remove();
       try {
         keepAliveRef.current?.remove();
       } catch {
