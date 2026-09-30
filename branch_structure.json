@@ -1,0 +1,18 @@
+{
+  "default_branch": "master",
+  "branches": [
+    "master",
+    "origin",
+    "worktree-fix-radio-reconnect"
+  ],
+  "parent": {
+    "master": null,
+    "origin": "master",
+    "worktree-fix-radio-reconnect": "master"
+  },
+  "order": [
+    "master",
+    "origin",
+    "worktree-fix-radio-reconnect"
+  ]
+}
