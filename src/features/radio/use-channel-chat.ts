@@ -93,12 +93,17 @@ export function useChannelChat(channelId: string | undefined) {
     const url = mediaUrl(audioKey);
     if (!url || !audioKey) return;
     try {
+      // Las notas de voz se escuchan UNA vez dentro de la app. NO deben sonar en
+      // segundo plano: con shouldPlayInBackground=true + doNotMix, al minimizar la
+      // sesión de media reiniciaba la nota en bucle. Con false, al pasar a 2do
+      // plano expo-audio la pausa (no hay bucle) y no toca el audio en vivo del
+      // radio (que va por WebRTC/InCallManager, no por expo-audio).
       await setAudioModeAsync({
         allowsRecording: false,
         playsInSilentMode: true,
         shouldRouteThroughEarpiece: false,
-        shouldPlayInBackground: true,
-        interruptionMode: 'doNotMix',
+        shouldPlayInBackground: false,
+        interruptionMode: 'duckOthers',
       });
       // Marca "reproduciendo" y lo limpia al terminar (según la duración).
       setPlayingKey(audioKey);

@@ -10,12 +10,18 @@ import { NativeModules, Platform } from 'react-native';
 type RadioKeepAliveNative = {
   start: () => void;
   stop: () => void;
+  isIgnoringBatteryOptimizations: () => Promise<boolean>;
 };
 
 const native: RadioKeepAliveNative | undefined =
   Platform.OS === 'android'
     ? (NativeModules.RadioKeepAlive as RadioKeepAliveNative | undefined)
     : undefined;
+
+if (Platform.OS === 'android' && !native) {
+  // Diagnóstico: si esto aparece, el módulo nativo no quedó registrado.
+  console.warn('[KeepAlive] módulo nativo RadioKeepAlive NO disponible');
+}
 
 export function startKeepAliveService() {
   try {
@@ -30,5 +36,15 @@ export function stopKeepAliveService() {
     native?.stop();
   } catch {
     /* noop */
+  }
+}
+
+/** ¿La app está exenta de optimización de batería? (true si no sabemos). */
+export async function isIgnoringBatteryOptimizations(): Promise<boolean> {
+  try {
+    if (!native) return true;
+    return await native.isIgnoringBatteryOptimizations();
+  } catch {
+    return true;
   }
 }

@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { Alert, Platform } from 'react-native';
 
 import { storage, StorageKeys } from '@/lib/storage';
+import { isIgnoringBatteryOptimizations } from '@/features/radio/keep-alive';
 
 const isExpoGo = Constants.appOwnership === 'expo';
 const PACKAGE = 'com.mape.app';
@@ -13,23 +14,13 @@ const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** ¿El equipo es Xiaomi/Redmi/Poco (MIUI/HyperOS)? Ahí el Autostart es lo que
  *  de verdad evita que maten la app al cerrarla desde "recientes". */
-function isMiui(): boolean {
+export function isMiui(): boolean {
   const m = `${Device.manufacturer ?? ''} ${Device.brand ?? ''}`.toLowerCase();
   return /xiaomi|redmi|poco/.test(m);
 }
 
-/** Muestra un Alert y resuelve cuando el usuario elige una opción. */
-function ask(title: string, message: string, okText: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    Alert.alert(title, message, [
-      { text: 'Ahora no', style: 'cancel', onPress: () => resolve(false) },
-      { text: okText, onPress: () => resolve(true) },
-    ]);
-  });
-}
-
-/** Abre los ajustes de batería sin restricciones para la app. */
-function openBatterySettings() {
+/** Abre los ajustes para eximir la app de la optimización de batería. */
+export function openBatterySettings() {
   IntentLauncher.startActivityAsync(
     'android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
     { data: `package:${PACKAGE}` },
@@ -41,7 +32,7 @@ function openBatterySettings() {
 }
 
 /** Abre el gestor de Inicio automático (Autostart) de MIUI. */
-function openMiuiAutostart() {
+export function openMiuiAutostart() {
   IntentLauncher.startActivityAsync('android.intent.action.MAIN', {
     packageName: 'com.miui.securitycenter',
     className: 'com.miui.permcenter.autostart.AutoStartManagementActivity',
@@ -53,46 +44,52 @@ function openMiuiAutostart() {
   });
 }
 
+function ask(title: string, message: string, okText: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    Alert.alert(title, message, [
+      { text: 'Ahora no', style: 'cancel', onPress: () => resolve(false) },
+      { text: okText, onPress: () => resolve(true) },
+    ]);
+  });
+}
+
 /**
- * Pide (una vez, al iniciar sesión) los permisos para que la app sobreviva en
- * segundo plano: batería sin restricciones y, en equipos MIUI, Inicio
- * automático. Se piden en SECUENCIA y con un pequeño respiro para no chocar con
- * los diálogos nativos (micrófono/notificaciones) que salen al abrir la app, y
- * así aparezcan desde el primer inicio (no solo al reabrir).
+ * Pide los permisos para que la radio sobreviva en segundo plano. La batería se
+ * pide según el ESTADO REAL (isIgnoringBatteryOptimizations): mientras no esté
+ * concedido, se ofrece en cada inicio (no depende de marcas guardadas). El
+ * Autostart de MIUI —que no tiene API para consultarse— se ofrece una vez.
  */
 export function useBackgroundPermission(enabled: boolean) {
   useEffect(() => {
     if (!enabled || Platform.OS !== 'android' || isExpoGo) return;
     let cancelled = false;
     void (async () => {
-      // Deja que terminen los diálogos nativos de permisos del arranque.
-      await delay(1200);
+      // Respiro para no chocar con los diálogos nativos del arranque
+      // (micrófono/notificaciones).
+      await delay(1500);
       if (cancelled) return;
 
-      // 1) Batería sin restricciones.
-      const batteryAsked = await storage.get(StorageKeys.bgPermAsked);
-      if (!batteryAsked && !cancelled) {
-        await storage.set(StorageKeys.bgPermAsked, '1');
+      // 1) Batería: solo si de verdad falta.
+      const ignoring = await isIgnoringBatteryOptimizations();
+      if (!ignoring && !cancelled) {
         const ok = await ask(
-          'Permitir en segundo plano',
-          'Para que la radio y la ubicación sigan funcionando con la pantalla apagada, permite que MAPE se ejecute sin restricciones de batería.',
+          'Evitar que se cierre la radio',
+          'Para que la radio siga sonando con la pantalla apagada, permite que MAPE se ejecute sin restricciones de batería.',
           'Permitir',
         );
         if (cancelled) return;
         if (ok) openBatterySettings();
-        // Espacio entre un ajuste y el siguiente.
         await delay(600);
         if (cancelled) return;
       }
 
-      // 2) Inicio automático (solo MIUI), es lo que evita el cierre al sacar la
-      //    app de "recientes".
+      // 2) Autostart (MIUI), una sola vez.
       const autostartAsked = await storage.get(StorageKeys.autostartAsked);
       if (isMiui() && !autostartAsked && !cancelled) {
         await storage.set(StorageKeys.autostartAsked, '1');
         const ok = await ask(
           'Activar Inicio automático',
-          'En este teléfono (MIUI) la radio puede dejar de sonar si el sistema cierra la app. Activa "Inicio automático" para MAPE y así no se cierre al apagar la pantalla.',
+          'En este teléfono (MIUI) la radio puede cerrarse sola. Activa "Inicio automático" para MAPE y así no se cierre al apagar la pantalla o sacarla de Recientes.',
           'Abrir ajustes',
         );
         if (cancelled) return;

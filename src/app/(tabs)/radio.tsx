@@ -19,6 +19,11 @@ import { useRadioSfu } from '@/features/radio/use-radio-sfu';
 import { playEndBeep } from '@/features/radio/beeps';
 import { useRadioNotification } from '@/features/radio/use-radio-notification';
 import { radioSession, useRadioDisconnected } from '@/features/radio/radio-session';
+import {
+  isMiui,
+  openBatterySettings,
+  openMiuiAutostart,
+} from '@/features/radio/use-background-permission';
 
 const SPEAKER_BARS = [8, 18, 26, 12, 22, 10, 16];
 const FALLBACK_CHANNELS = ['Canal 1', 'Canal 2 · Norte', 'Taller'];
@@ -84,6 +89,12 @@ export default function RadioScreen() {
   const playLast = () => {
     const last = messages.find((m) => m.audioKey);
     if (last) void playAudio(last.audioKey, last.durationSec);
+  };
+
+  // Abre batería sin restricciones y, en MIUI, el Inicio automático (secuencial).
+  const openBackgroundSettings = () => {
+    openBatterySettings();
+    if (isMiui()) setTimeout(openMiuiAutostart, 500);
   };
 
   const openChat = () => {
@@ -312,6 +323,19 @@ export default function RadioScreen() {
             <Text style={styles.actionText}>Chat</Text>
           </PressableScale>
         </Animated.View>
+
+        {/* Ajuste clave en Xiaomi/MIUI: sin Autostart + batería sin límites, el
+            sistema cierra la app y la radio deja de sonar en 2do plano. Botón
+            siempre visible para configurarlo cuando el usuario quiera. */}
+        <Animated.View style={styles.bgRow} entering={rise(5)}>
+          <PressableScale
+            style={styles.bgBtn}
+            onPress={openBackgroundSettings}
+            accessibilityLabel="Configurar para que no se cierre en segundo plano">
+            <Icon name="sliders" size={16} color={Mape.textSubtle} strokeWidth={1.8} />
+            <Text style={styles.bgText}>Evitar que se cierre en 2.º plano</Text>
+          </PressableScale>
+        </Animated.View>
       </ScrollView>
 
     </Screen>
@@ -466,6 +490,16 @@ const styles = StyleSheet.create({
   segBtnActive: { backgroundColor: Mape.ink },
   segText: { fontSize: 14, color: Mape.ink, fontFamily: Font.semibold },
   segTextActive: { color: Mape.white },
+
+  bgRow: { width: '100%', alignItems: 'center' },
+  bgBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  bgText: { fontSize: 12, color: Mape.textSubtle, fontFamily: Font.medium },
 
   actions: { flexDirection: 'row', gap: 10, width: '100%' },
   actionBtn: {
