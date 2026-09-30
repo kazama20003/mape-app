@@ -85,6 +85,10 @@ export function useRadioSfu(
   speakerRef.current = speaker;
   // Dispositivos de salida disponibles (se actualizan por evento de InCallManager).
   const devicesRef = useRef({ bt: false, wired: false });
+  // Última ruta REALMENTE aplicada. Evita re-elegir Bluetooth en bucle: cada
+  // chooseAudioRoute('BLUETOOTH') reinicia el SCO (corta el audio), y el propio
+  // cambio dispara onAudioDeviceChanged -> si re-rutéabamos, era un bucle infinito.
+  const lastRouteRef = useRef<string | null>(null);
 
   // Aplica el ruteo según el botón:
   //  - Altavoz -> parlante del teléfono.
@@ -93,21 +97,31 @@ export function useRadioSfu(
   const applyRoute = useCallback(() => {
     try {
       if (speakerRef.current) {
+        // Altavoz: re-aplicar es barato (no toca SCO) y corrige el desfase de
+        // arranque, así que no deduplicamos.
         InCallManager.setForceSpeakerphoneOn(true);
         void InCallManager.chooseAudioRoute('SPEAKER_PHONE').catch(() => {});
+        lastRouteRef.current = 'SPEAKER_PHONE';
         setOutputDevice('speaker');
       } else {
         InCallManager.setForceSpeakerphoneOn(false);
-        if (devicesRef.current.bt) {
-          void InCallManager.chooseAudioRoute('BLUETOOTH').catch(() => {});
-          setOutputDevice('bluetooth');
-        } else if (devicesRef.current.wired) {
-          void InCallManager.chooseAudioRoute('WIRED_HEADSET').catch(() => {});
-          setOutputDevice('wired');
-        } else {
-          void InCallManager.chooseAudioRoute('EARPIECE').catch(() => {});
-          setOutputDevice('earpiece');
-        }
+        const desired = devicesRef.current.bt
+          ? 'BLUETOOTH'
+          : devicesRef.current.wired
+            ? 'WIRED_HEADSET'
+            : 'EARPIECE';
+        // Solo cambiar si el destino cambió: re-elegir la MISMA ruta (sobre todo
+        // Bluetooth) reinicia el SCO y produce el corte/lag continuo.
+        if (desired === lastRouteRef.current) return;
+        lastRouteRef.current = desired;
+        void InCallManager.chooseAudioRoute(desired).catch(() => {});
+        setOutputDevice(
+          desired === 'BLUETOOTH'
+            ? 'bluetooth'
+            : desired === 'WIRED_HEADSET'
+              ? 'wired'
+              : 'earpiece',
+        );
       }
     } catch {
       /* noop */
@@ -373,11 +387,20 @@ export function useRadioSfu(
     // la ruta a "auto" con un retardo interno, así que re-aplicamos para que el
     // Altavoz (o Normal) quede fijo desde el inicio (sin el desfase del arranque).
     applyRoute();
-    const routeTimers = [300, 900, 1800, 3000].map((ms) =>
-      setTimeout(applyRoute, ms),
-    );
-    // Cuando cambian los dispositivos (conectas/desconectas Bluetooth, etc.),
-    // actualizamos la lista y re-aplicamos la ruta deseada.
+    // InCallManager.start() resetea la ruta a "auto" con un retardo interno. Para
+    // corregir ese desfase re-aplicamos un par de veces, FORZANDO (reset del
+    // dedupe) para que también se re-rutee a Bluetooth si hiciera falta. Solo 2
+    // veces para no reiniciar el SCO de más.
+    const forceApply = () => {
+      lastRouteRef.current = null;
+      applyRoute();
+    };
+    const routeTimers = [800, 2000].map((ms) => setTimeout(forceApply, ms));
+    // Cuando cambian los dispositivos disponibles (conectas/desconectas el
+    // audífono Bluetooth o el cable), re-aplicamos la ruta. IMPORTANTE: solo si
+    // la lista de disponibles CAMBIÓ. InCallManager dispara este evento también
+    // en cada cambio de estado del SCO (CONNECTED/AVAILABLE); si re-rutéabamos
+    // ahí, chooseAudioRoute reiniciaba el SCO y se realimentaba en bucle -> lag.
     const deviceSub = DeviceEventEmitter.addListener(
       'onAudioDeviceChanged',
       (d: { availableAudioDeviceList?: string }) => {
@@ -385,10 +408,12 @@ export function useRadioSfu(
           const list: string[] = d?.availableAudioDeviceList
             ? JSON.parse(d.availableAudioDeviceList)
             : [];
-          devicesRef.current = {
-            bt: list.includes('BLUETOOTH'),
-            wired: list.includes('WIRED_HEADSET'),
-          };
+          const bt = list.includes('BLUETOOTH');
+          const wired = list.includes('WIRED_HEADSET');
+          if (bt === devicesRef.current.bt && wired === devicesRef.current.wired) {
+            return; // sin cambios de dispositivos -> no re-rutear (evita bucle SCO)
+          }
+          devicesRef.current = { bt, wired };
         } catch {
           /* noop */
         }
