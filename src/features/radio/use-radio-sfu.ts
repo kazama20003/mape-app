@@ -396,11 +396,11 @@ export function useRadioSfu(
       applyRoute();
     };
     const routeTimers = [800, 2000].map((ms) => setTimeout(forceApply, ms));
-    // Cuando cambian los dispositivos disponibles (conectas/desconectas el
-    // audífono Bluetooth o el cable), re-aplicamos la ruta. IMPORTANTE: solo si
-    // la lista de disponibles CAMBIÓ. InCallManager dispara este evento también
-    // en cada cambio de estado del SCO (CONNECTED/AVAILABLE); si re-rutéabamos
-    // ahí, chooseAudioRoute reiniciaba el SCO y se realimentaba en bucle -> lag.
+    // Cuando cambian los dispositivos (conectas/desconectas Bluetooth o cable),
+    // actualizamos la lista y re-aplicamos la ruta. El bucle de SCO se evita en
+    // applyRoute (dedupe por lastRoute): si el destino no cambió, NO se vuelve a
+    // llamar chooseAudioRoute, así que aunque este evento se dispare por cambios
+    // de estado del SCO, no reinicia nada.
     const deviceSub = DeviceEventEmitter.addListener(
       'onAudioDeviceChanged',
       (d: { availableAudioDeviceList?: string }) => {
@@ -408,12 +408,10 @@ export function useRadioSfu(
           const list: string[] = d?.availableAudioDeviceList
             ? JSON.parse(d.availableAudioDeviceList)
             : [];
-          const bt = list.includes('BLUETOOTH');
-          const wired = list.includes('WIRED_HEADSET');
-          if (bt === devicesRef.current.bt && wired === devicesRef.current.wired) {
-            return; // sin cambios de dispositivos -> no re-rutear (evita bucle SCO)
-          }
-          devicesRef.current = { bt, wired };
+          devicesRef.current = {
+            bt: list.includes('BLUETOOTH'),
+            wired: list.includes('WIRED_HEADSET'),
+          };
         } catch {
           /* noop */
         }
