@@ -1,7 +1,7 @@
 import { requestRecordingPermissionsAsync } from 'expo-audio';
 import Constants from 'expo-constants';
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { PermissionsAndroid, Platform } from 'react-native';
 
 const isExpoGo = Constants.appOwnership === 'expo';
 
@@ -16,6 +16,19 @@ export function useStartupPermissions(enabled: boolean) {
     (async () => {
       try {
         await requestRecordingPermissionsAsync();
+      } catch {
+        /* noop */
+      }
+      // Bluetooth (Android 12+): sin BLUETOOTH_CONNECT, InCallManager no detecta
+      // ni usa el audífono Bluetooth (el audio se queda en el auricular/altavoz).
+      try {
+        if (Platform.OS === 'android' && Number(Platform.Version) >= 31) {
+          await PermissionsAndroid.request(
+            'android.permission.BLUETOOTH_CONNECT' as Parameters<
+              typeof PermissionsAndroid.request
+            >[0],
+          );
+        }
       } catch {
         /* noop */
       }
