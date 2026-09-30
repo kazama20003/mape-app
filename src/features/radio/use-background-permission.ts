@@ -83,25 +83,21 @@ export function useBackgroundPermission(enabled: boolean) {
         if (cancelled) return;
       }
 
-      // 2) Autostart (MIUI). No hay API para saber si está activo, así que se
-      //    RE-OFRECE en cada inicio hasta que el usuario confirme ("Ya lo activé").
-      //    Es EL ajuste que evita que MIUI mate la app al sacarla de Recientes.
+      // 2) Autostart (MIUI). No hay API para saber si está activo. Se ofrece UNA
+      //    vez; si el usuario abre los ajustes o confirma que ya lo activó, NO se
+      //    vuelve a preguntar (solo "Ahora no" lo deja pendiente para la próxima).
       const autostartDone = await storage.get(StorageKeys.autostartAsked);
       if (isMiui() && !autostartDone && !cancelled) {
         await new Promise<void>((resolve) => {
+          // Marca como hecho para no volver a molestar.
+          const markDone = () => void storage.set(StorageKeys.autostartAsked, '1');
           Alert.alert(
             'Activar Inicio automático',
             'En este teléfono (MIUI) la radio se cierra al sacarla de Recientes o apagar la pantalla si "Inicio automático" está apagado. Actívalo para MAPE (es lo único que lo evita).',
             [
-              {
-                text: 'Ya lo activé',
-                onPress: () => {
-                  void storage.set(StorageKeys.autostartAsked, '1');
-                  resolve();
-                },
-              },
+              { text: 'Ya lo activé', onPress: () => { markDone(); resolve(); } },
               { text: 'Ahora no', style: 'cancel', onPress: () => resolve() },
-              { text: 'Abrir ajustes', onPress: () => { openMiuiAutostart(); resolve(); } },
+              { text: 'Abrir ajustes', onPress: () => { markDone(); openMiuiAutostart(); resolve(); } },
             ],
             { cancelable: false },
           );
