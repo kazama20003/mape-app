@@ -26,7 +26,8 @@ registerGlobals();
 // captura: quien habla bajo o lejos del micro se sube automáticamente, así todos
 // se escuchan más parejo (evita que en un canal se oiga fuerte y en otro bajo,
 // que depende de quién habla). + cancelación de eco y supresión de ruido.
-const MIC_CONSTRAINTS = {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const MIC_CONSTRAINTS: any = {
   audio: {
     echoCancellation: true,
     noiseSuppression: true,

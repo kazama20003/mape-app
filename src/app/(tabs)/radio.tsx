@@ -17,7 +17,12 @@ import { useChannels } from '@/features/data/hooks';
 import { useChannelChat } from '@/features/radio/use-channel-chat';
 import { useRadioSfu } from '@/features/radio/use-radio-sfu';
 import { playEndBeep } from '@/features/radio/beeps';
-import { updateKeepAliveNotification } from '@/features/radio/keep-alive';
+import {
+  getCommunicationVolume,
+  setCommunicationVolume,
+  updateKeepAliveNotification,
+} from '@/features/radio/keep-alive';
+import { VolumeSlider } from '@/components/mape/volume-slider';
 import { radioSession, useRadioDisconnected } from '@/features/radio/radio-session';
 import {
   isMiui,
@@ -71,6 +76,15 @@ export default function RadioScreen() {
   //  - Altavoz (speakerOn=true)  -> fuerza el altavoz del teléfono.
   //  - Normal   (speakerOn=false) -> ruteo normal: audífono si hay, si no auricular.
   const [speakerOn, setSpeakerOn] = useState(true);
+
+  // Volumen del audio en vivo (0..1), controlado por el slider manual. Al entrar
+  // se auto-sube al máximo (ver use-radio-sfu); aquí leemos ese valor tras el
+  // arranque para que el slider lo refleje, y luego el usuario lo ajusta.
+  const [volume, setVolume] = useState(1);
+  const onVolumeChange = (v: number) => {
+    setVolume(v);
+    setCommunicationVolume(v);
+  };
 
   // ¿Se pulsó "Desconectar" en la notificación? Al enfocar la pestaña de radio
   // se reconecta automáticamente.
@@ -139,6 +153,16 @@ export default function RadioScreen() {
       updateKeepAliveNotification(channelLabel, radioStatus);
     }
   }, [channelLabel, disconnected, radioStatus]);
+
+  // Lee el volumen real tras el auto-boost de arranque (800/2000ms) para que el
+  // slider arranque reflejando el valor correcto.
+  useEffect(() => {
+    if (!activeChannel) return;
+    const t = setTimeout(() => {
+      void getCommunicationVolume().then(setVolume);
+    }, 2200);
+    return () => clearTimeout(t);
+  }, [activeChannel]);
 
   // (El ruteo Altavoz/Normal lo maneja useRadioSfu: lo aplica tras iniciar la
   // sesión de audio y lo re-aplica para vencer el reset de InCallManager.start.)
@@ -329,6 +353,12 @@ export default function RadioScreen() {
           </PressableScale>
         </Animated.View>
 
+        {/* Volumen manual del audio en vivo (además del auto-boost al entrar). */}
+        <Animated.View style={styles.volumeRow} entering={rise(4)}>
+          <Icon name="speaker" size={18} color={Mape.textSubtle} strokeWidth={1.8} />
+          <VolumeSlider value={volume} onChange={onVolumeChange} />
+        </Animated.View>
+
         {/* Acciones */}
         <Animated.View style={styles.actions} entering={rise(4)}>
           <PressableScale
@@ -513,6 +543,17 @@ const styles = StyleSheet.create({
   segBtnActive: { backgroundColor: Mape.ink },
   segText: { fontSize: 14, color: Mape.ink, fontFamily: Font.semibold },
   segTextActive: { color: Mape.white },
+
+  volumeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
+    backgroundColor: Mape.white,
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+  },
 
   bgRow: { width: '100%', alignItems: 'center' },
   bgBtn: {

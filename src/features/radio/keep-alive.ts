@@ -12,6 +12,8 @@ type RadioKeepAliveNative = {
   update: (channel?: string, status?: string) => void;
   stop: () => void;
   boostCommunicationVolume: () => void;
+  getCommunicationVolume: () => Promise<number>;
+  setCommunicationVolume: (fraction: number) => void;
   isIgnoringBatteryOptimizations: () => Promise<boolean>;
 };
 
@@ -46,6 +48,25 @@ export function updateKeepAliveNotification(channel: string, status: string) {
 export function boostCommunicationVolume() {
   try {
     native?.boostCommunicationVolume();
+  } catch {
+    /* noop */
+  }
+}
+
+/** Volumen actual del audio en vivo como fracción 0..1 (para el slider). */
+export async function getCommunicationVolume(): Promise<number> {
+  try {
+    const v = await native?.getCommunicationVolume();
+    return typeof v === 'number' ? v : 1;
+  } catch {
+    return 1;
+  }
+}
+
+/** Fija el volumen del audio en vivo (fracción 0..1) desde el slider. */
+export function setCommunicationVolume(fraction: number) {
+  try {
+    native?.setCommunicationVolume(fraction);
   } catch {
     /* noop */
   }
