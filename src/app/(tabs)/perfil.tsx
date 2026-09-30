@@ -71,7 +71,7 @@ export default function PerfilScreen() {
         <Animated.View style={styles.profileCard} entering={rise(1)}>
           <Avatar
             variant="me"
-            uri={mediaUrl(user?.avatarKey)}
+            uri={user?.photoUrl ?? mediaUrl(user?.avatarKey)}
             size={68}
             radius={34}
             borderWidth={3}

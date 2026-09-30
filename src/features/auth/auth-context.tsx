@@ -19,6 +19,7 @@ interface AuthContextValue {
   token: string | null;
   signIn: (identifier: string, password: string) => Promise<AuthUser>;
   signOut: () => Promise<void>;
+  updateUser: (patch: Partial<AuthUser>) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -40,6 +41,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       storage.set(StorageKeys.refreshToken, session.refreshToken),
       storage.set(StorageKeys.user, JSON.stringify(session.user)),
     ]);
+  }, []);
+
+  const updateUser = useCallback((patch: Partial<AuthUser>) => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, ...patch };
+      void storage.set(StorageKeys.user, JSON.stringify(next));
+      return next;
+    });
   }, []);
 
   const clear = useCallback(async () => {
@@ -136,7 +146,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [status, token, signOut]);
 
   return (
-    <AuthContext.Provider value={{ status, user, token, signIn, signOut }}>
+    <AuthContext.Provider
+      value={{ status, user, token, signIn, signOut, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

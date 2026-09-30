@@ -1,4 +1,6 @@
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Alert as RNAlert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -11,8 +13,10 @@ import { PressableScale } from '@/components/mape/pressable-scale';
 import { BackButton } from '@/components/mape/back-button';
 import { Screen } from '@/components/mape/screen';
 import { Font, Mape } from '@/constants/mape-theme';
+import { useAuth } from '@/features/auth/auth-context';
 import { useMe, useUpdateProfile } from '@/features/data/hooks';
-import type { Shift } from '@/lib/types';
+import { api } from '@/lib/api';
+import type { AuthUser, Shift } from '@/lib/types';
 
 type FieldKey = 'name' | 'positionTitle' | 'email' | 'phone';
 type Field = {
@@ -40,7 +44,32 @@ export default function CuentaScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { data: me } = useMe();
+  const { updateUser } = useAuth();
+  const qc = useQueryClient();
   const updateProfile = useUpdateProfile();
+  const [uploading, setUploading] = useState(false);
+
+  const pickPhoto = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) return;
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+      });
+      if (res.canceled || !res.assets[0]) return;
+      setUploading(true);
+      const updated = await api.uploadProfilePhoto(res.assets[0].uri);
+      updateUser({ photoUrl: updated.photoUrl }); // avatar en toda la app
+      qc.setQueryData<AuthUser>(['users', 'me'], updated); // esta pantalla
+    } catch (e) {
+      RNAlert.alert('No se pudo subir la foto', (e as Error).message);
+    } finally {
+      setUploading(false);
+    }
+  };
   const [values, setValues] = useState<Record<FieldKey, string>>({
     name: '',
     positionTitle: '',
@@ -97,13 +126,25 @@ export default function CuentaScreen() {
         {/* Foto de perfil */}
         <Animated.View style={styles.photoBlock} entering={rise(1)}>
           <View>
-            <Avatar variant="me" size={96} radius={48} borderWidth={3} borderColor={Mape.white} />
-            <PressableScale style={styles.cameraBtn} accessibilityLabel="Cambiar foto">
+            <Avatar
+              variant="me"
+              uri={me?.photoUrl}
+              size={96}
+              radius={48}
+              borderWidth={3}
+              borderColor={Mape.white}
+            />
+            <PressableScale
+              style={styles.cameraBtn}
+              onPress={() => void pickPhoto()}
+              accessibilityLabel="Cambiar foto">
               <Icon name="image" size={16} color={Mape.white} strokeWidth={2} />
             </PressableScale>
           </View>
-          <PressableScale>
-            <Text style={styles.changePhoto}>Cambiar foto</Text>
+          <PressableScale onPress={() => void pickPhoto()} disabled={uploading}>
+            <Text style={styles.changePhoto}>
+              {uploading ? 'Subiendo…' : 'Cambiar foto'}
+            </Text>
           </PressableScale>
         </Animated.View>
 

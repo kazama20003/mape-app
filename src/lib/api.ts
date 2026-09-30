@@ -1,4 +1,5 @@
 import { API_BASE, API_ORIGIN } from './config';
+import type { AuthUser } from './types';
 
 export class ApiError extends Error {
   constructor(
@@ -106,6 +107,33 @@ async function upload(
   return (await res.json()) as UploadResult;
 }
 
+/** Sube la foto de perfil (Cloudinary vía backend) y devuelve el usuario. */
+async function uploadProfilePhoto(fileUri: string): Promise<AuthUser> {
+  const name = fileUri.split('/').pop() ?? 'foto.jpg';
+  const form = new FormData();
+  form.append('file', {
+    uri: fileUri,
+    name,
+    type: 'image/jpeg',
+  } as unknown as Blob);
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/users/me/photo`, {
+      method: 'POST',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      body: form,
+    });
+  } catch {
+    throw new ApiError(0, `No se pudo subir la foto (${API_ORIGIN}).`);
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { message?: string };
+    throw new ApiError(res.status, body.message ?? `Error ${res.status}`);
+  }
+  return (await res.json()) as AuthUser;
+}
+
 /** Construye la URL completa de un archivo servido por el backend. */
 export function mediaUrl(key: string | null | undefined): string | null {
   if (!key) return null;
@@ -122,4 +150,5 @@ export const api = {
     request<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
   del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
   upload,
+  uploadProfilePhoto,
 };

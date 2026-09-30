@@ -16,6 +16,7 @@ export interface AuthUser {
   shift?: Shift;
   positionTitle?: string | null;
   avatarKey?: string | null;
+  photoUrl?: string | null;
   nickname?: string | null;
   phone?: string | null;
   operatorCode?: string | null;
