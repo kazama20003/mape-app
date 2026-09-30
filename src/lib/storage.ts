@@ -14,4 +14,5 @@ export const StorageKeys = {
   lastRoute: 'mape.lastRoute',
   bgPermAsked: 'mape.bgPermAsked',
   autostartAsked: 'mape.autostartAsked',
+  lastChannelId: 'mape.lastChannelId',
 } as const;

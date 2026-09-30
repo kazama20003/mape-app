@@ -83,17 +83,29 @@ export function useBackgroundPermission(enabled: boolean) {
         if (cancelled) return;
       }
 
-      // 2) Autostart (MIUI), una sola vez.
-      const autostartAsked = await storage.get(StorageKeys.autostartAsked);
-      if (isMiui() && !autostartAsked && !cancelled) {
-        await storage.set(StorageKeys.autostartAsked, '1');
-        const ok = await ask(
-          'Activar Inicio automático',
-          'En este teléfono (MIUI) la radio puede cerrarse sola. Activa "Inicio automático" para MAPE y así no se cierre al apagar la pantalla o sacarla de Recientes.',
-          'Abrir ajustes',
-        );
-        if (cancelled) return;
-        if (ok) openMiuiAutostart();
+      // 2) Autostart (MIUI). No hay API para saber si está activo, así que se
+      //    RE-OFRECE en cada inicio hasta que el usuario confirme ("Ya lo activé").
+      //    Es EL ajuste que evita que MIUI mate la app al sacarla de Recientes.
+      const autostartDone = await storage.get(StorageKeys.autostartAsked);
+      if (isMiui() && !autostartDone && !cancelled) {
+        await new Promise<void>((resolve) => {
+          Alert.alert(
+            'Activar Inicio automático',
+            'En este teléfono (MIUI) la radio se cierra al sacarla de Recientes o apagar la pantalla si "Inicio automático" está apagado. Actívalo para MAPE (es lo único que lo evita).',
+            [
+              {
+                text: 'Ya lo activé',
+                onPress: () => {
+                  void storage.set(StorageKeys.autostartAsked, '1');
+                  resolve();
+                },
+              },
+              { text: 'Ahora no', style: 'cancel', onPress: () => resolve() },
+              { text: 'Abrir ajustes', onPress: () => { openMiuiAutostart(); resolve(); } },
+            ],
+            { cancelable: false },
+          );
+        });
       }
     })();
     return () => {

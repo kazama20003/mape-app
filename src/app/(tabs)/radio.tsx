@@ -24,6 +24,7 @@ import {
   openBatterySettings,
   openMiuiAutostart,
 } from '@/features/radio/use-background-permission';
+import { storage, StorageKeys } from '@/lib/storage';
 
 const SPEAKER_BARS = [8, 18, 26, 12, 22, 10, 16];
 const FALLBACK_CHANNELS = ['Canal 1', 'Canal 2 · Norte', 'Taller'];
@@ -44,6 +45,24 @@ export default function RadioScreen() {
   const channelsQuery = useChannels();
   const channels = channelsQuery.data ?? [];
   const activeChannel = channels[channel];
+
+  // Restaurar el último canal seleccionado tras reabrir/reiniciar la app (si no,
+  // siempre volvía al Canal 1). Se hace una sola vez, cuando ya cargaron los
+  // canales. Y se guarda cada vez que el usuario cambia de canal.
+  const channelRestoredRef = useRef(false);
+  useEffect(() => {
+    if (channelRestoredRef.current || channels.length === 0) return;
+    channelRestoredRef.current = true;
+    void storage.get(StorageKeys.lastChannelId).then((id) => {
+      if (!id) return;
+      const idx = channels.findIndex((c) => c.id === id);
+      if (idx >= 0) setChannel(idx);
+    });
+  }, [channels]);
+  useEffect(() => {
+    const id = channels[channel]?.id;
+    if (id) void storage.set(StorageKeys.lastChannelId, id);
+  }, [channel, channels]);
   const channelNames = channels.length
     ? channels.map((c) => (c.description ? `${c.name} · ${c.description}` : c.name))
     : FALLBACK_CHANNELS;

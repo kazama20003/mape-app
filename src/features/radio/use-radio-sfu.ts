@@ -375,11 +375,28 @@ export function useRadioSfu(
   // y NO se reinicia al cambiar de canal -> el ruteo de audio (altavoz/audífono)
   // ya no se cruza entre canales. Se libera al salir de la radio.
   const radioActive = !!token && !!channelId;
+
+  // Keep-alive (foreground service nativo). CLAVE para 2do plano: se inicia al
+  // entrar a un canal y SOLO se detiene cuando el usuario sale de verdad (logout
+  // o "Desconectar" en la notificación -> token/channelId nulos -> radioActive
+  // false). NO se detiene al desmontar la pantalla ni al cerrar la app: si lo
+  // hiciéramos, deslizar la app de Recientes o cambiar de pestaña apagaría la
+  // notificación y mataría la radio (era el bug: se veía "JS stop()" en logcat al
+  // cerrar). La resurrección tras deslizar de Recientes la hace el servicio
+  // nativo (onTaskRemoved en RadioKeepAliveService.kt).
+  const keepAliveOnRef = useRef(false);
+  useEffect(() => {
+    if (radioActive && !keepAliveOnRef.current) {
+      keepAliveOnRef.current = true;
+      startKeepAliveService();
+    } else if (!radioActive && keepAliveOnRef.current) {
+      keepAliveOnRef.current = false;
+      stopKeepAliveService();
+    }
+  }, [radioActive]);
+
   useEffect(() => {
     if (!radioActive) return;
-    // Foreground service nativo (tipo micrófono) para sobrevivir en 2do plano
-    // sin tocar el ruteo de audio (ver keep-alive.ts / RadioKeepAliveService.kt).
-    startKeepAliveService();
     try {
       InCallManager.start({ media: 'audio' });
     } catch {
@@ -438,7 +455,9 @@ export function useRadioSfu(
     return () => {
       routeTimers.forEach(clearTimeout);
       deviceSub.remove();
-      stopKeepAliveService();
+      // OJO: NO se detiene el keep-alive aquí. Este cleanup corre también al
+      // desmontar/cerrar la app; apagarlo aquí mataba la radio en 2do plano.
+      // El keep-alive lo gestiona el efecto dedicado de arriba (por radioActive).
       try {
         InCallManager.setForceSpeakerphoneOn(false);
         InCallManager.stop();
