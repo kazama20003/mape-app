@@ -78,38 +78,6 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
     let pendingSetup = false;
     let connectedOnce = socket.connected;
 
-    // Sesión de audio de comunicación (volumen propio de la app, sin tocar el
-    // volumen multimedia del sistema) que sigue viva con la pantalla apagada /
-    // en segundo plano y no se cae en llamadas. El ruteo (altavoz vs auricular/
-    // audífonos) lo controla el toggle de la pantalla de radio.
-    try {
-      InCallManager.start({ media: 'audio' });
-    } catch {
-      /* noop */
-    }
-    // Silencio en LOOP: arranca el foreground service de audio de expo-audio, así
-    // Android no suspende la salida de sonido con la app en 2.º plano (sin esto,
-    // la notificación decía "hablando" pero no se escuchaba hasta volver a la app).
-    void (async () => {
-      try {
-        await setAudioModeAsync({
-          playsInSilentMode: true,
-          shouldPlayInBackground: true,
-        });
-      } catch {
-        /* noop */
-      }
-      try {
-        const ka = createAudioPlayer(require('../../../assets/silence.wav'));
-        ka.loop = true;
-        ka.volume = 0;
-        ka.play();
-        keepAliveRef.current = ka;
-      } catch {
-        /* noop */
-      }
-    })();
-
     const consume = async (producerId: string) => {
       const device = deviceRef.current;
       const recv = recvRef.current;
@@ -308,6 +276,41 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
       teardownLocal();
+    };
+  }, [token, channelId]);
+
+  // Sesión de audio de comunicación (InCallManager) + keep-alive (silencio en
+  // loop para el foreground service). Se inicia UNA sola vez al entrar a la radio
+  // y NO se reinicia al cambiar de canal -> el ruteo de audio (altavoz/audífono)
+  // ya no se cruza entre canales. Se libera al salir de la radio.
+  const radioActive = !!token && !!channelId;
+  useEffect(() => {
+    if (!radioActive) return;
+    try {
+      InCallManager.start({ media: 'audio' });
+    } catch {
+      /* noop */
+    }
+    void (async () => {
+      try {
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          shouldPlayInBackground: true,
+        });
+      } catch {
+        /* noop */
+      }
+      try {
+        const ka = createAudioPlayer(require('../../../assets/silence.wav'));
+        ka.loop = true;
+        ka.volume = 0;
+        ka.play();
+        keepAliveRef.current = ka;
+      } catch {
+        /* noop */
+      }
+    })();
+    return () => {
       try {
         keepAliveRef.current?.remove();
       } catch {
@@ -321,7 +324,7 @@ export function useRadioSfu(channelId: string | undefined, muted: boolean) {
         /* noop */
       }
     };
-  }, [token, channelId]);
+  }, [radioActive]);
 
   // Silencio (mute): pausa/reanuda la reproducción de los consumers en curso,
   // sin desconectar. Así el botón de silencio afecta al audio que ya está sonando.
