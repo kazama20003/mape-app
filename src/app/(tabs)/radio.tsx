@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DeviceEventEmitter, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import InCallManager from 'react-native-incall-manager';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -47,27 +47,10 @@ export default function RadioScreen() {
   const [muted, setMuted] = useState(false);
   const toggleMuted = () => setMuted((v) => !v);
 
-  // Ruteo de salida: Altavoz (fuerte) vs Normal (auricular). Por defecto altavoz.
+  // Ruteo de salida (lo manda el botón, estricto):
+  //  - Altavoz (speakerOn=true)  -> fuerza el altavoz del teléfono.
+  //  - Normal   (speakerOn=false) -> ruteo normal: audífono si hay, si no auricular.
   const [speakerOn, setSpeakerOn] = useState(true);
-  // ¿Hay audífono con cable conectado? Si sí, NUNCA forzamos altavoz (el audio
-  // debe salir por el audífono). Bluetooth lo rutea InCallManager solo.
-  const [headset, setHeadset] = useState(false);
-  useEffect(() => {
-    let mounted = true;
-    InCallManager.getIsWiredHeadsetPluggedIn()
-      .then((v: { isWiredHeadsetPluggedIn: boolean }) => {
-        if (mounted) setHeadset(!!v?.isWiredHeadsetPluggedIn);
-      })
-      .catch(() => {});
-    const sub = DeviceEventEmitter.addListener(
-      'WiredHeadset',
-      (d: { isPlugged?: boolean }) => setHeadset(!!d?.isPlugged),
-    );
-    return () => {
-      mounted = false;
-      sub.remove();
-    };
-  }, []);
 
   // ¿Se pulsó "Desconectar" en la notificación? Al enfocar la pestaña de radio
   // se reconecta automáticamente.
@@ -114,23 +97,21 @@ export default function RadioScreen() {
     radioStatus,
   );
 
-  // Ruteo de salida: con audífono (cable/BT) NO se fuerza altavoz -> suena en el
-  // audífono. Sin audífono, altavoz si el usuario lo eligió, si no auricular.
+  // Aplica el ruteo según el botón: Altavoz fuerza el parlante; Normal no fuerza
+  // (suena en audífono si hay, si no en el auricular).
   useEffect(() => {
     if (!activeChannel || disconnected) return;
     const apply = () => {
       try {
-        InCallManager.setForceSpeakerphoneOn(headset ? false : speakerOn);
+        InCallManager.setForceSpeakerphoneOn(speakerOn);
       } catch {
         /* noop */
       }
     };
     apply();
-    // Re-aplica tras el reinicio de InCallManager al cambiar de canal: sin esto,
-    // el start() del canal nuevo dejaba el audio en altavoz (cruce de botones).
-    const t = setTimeout(apply, 500);
+    const t = setTimeout(apply, 500); // re-aplica por si InCallManager tardó en iniciar
     return () => clearTimeout(t);
-  }, [speakerOn, activeChannel, disconnected, headset]);
+  }, [speakerOn, activeChannel, disconnected]);
 
   // Hablar MANTENIENDO presionado o con un TOQUE (queda fijado hasta el próximo
   // toque). Usamos refs para no depender del estado async dentro del gesto.
@@ -293,19 +274,17 @@ export default function RadioScreen() {
             </Text>
           </PressableScale>
           <PressableScale
-            style={[styles.actionBtn, speakerOn && !headset && styles.actionBtnActive]}
+            style={[styles.actionBtn, speakerOn && styles.actionBtnActive]}
             onPress={() => setSpeakerOn((v) => !v)}
-            disabled={headset}
-            accessibilityLabel="Alternar altavoz o auricular">
+            accessibilityLabel="Alternar altavoz o normal">
             <Icon
               name="speaker"
               size={18}
-              color={speakerOn && !headset ? Mape.white : Mape.ink}
+              color={speakerOn ? Mape.white : Mape.ink}
               strokeWidth={1.8}
             />
-            <Text
-              style={[styles.actionText, speakerOn && !headset && styles.actionTextActive]}>
-              {headset ? 'Audífono' : speakerOn ? 'Altavoz' : 'Normal'}
+            <Text style={[styles.actionText, speakerOn && styles.actionTextActive]}>
+              {speakerOn ? 'Altavoz' : 'Normal'}
             </Text>
           </PressableScale>
           <PressableScale
