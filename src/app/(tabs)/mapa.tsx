@@ -1,9 +1,22 @@
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Alert as RNAlert,
+  FlatList,
+  Linking,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, {
+  Marker,
+  Polyline,
+  PROVIDER_GOOGLE,
+  type MapPressEvent,
+} from 'react-native-maps';
 
 import Animated from 'react-native-reanimated';
 
@@ -20,6 +33,7 @@ import { useLiveUnits } from '@/features/tracking/use-live-units';
 import { useLocationPermission } from '@/features/tracking/use-location-permission';
 import { useLocationReporter } from '@/features/tracking/use-location-reporter';
 import { useLivePeople, usePresenceReporter } from '@/features/tracking/use-presence';
+import { decodePolyline, useGuide } from '@/features/tracking/use-guide';
 import { mediaUrl } from '@/lib/api';
 import type { LivePerson, LiveUnit } from '@/lib/types';
 
@@ -108,15 +122,31 @@ function personLabel(p: LivePerson): string {
 }
 
 /** Marcador con el avatar y apelativo de una persona (cualquier rol). */
-function PersonMarker({ p, isSelf }: { p: LocatedPerson; isSelf: boolean }) {
+function PersonMarker({
+  p,
+  isSelf,
+  onSelect,
+  targeted,
+}: {
+  p: LocatedPerson;
+  isSelf: boolean;
+  onSelect?: () => void;
+  targeted?: boolean;
+}) {
   const [tracks, setTracks] = useState(true);
 
   useEffect(() => {
     const t = setTimeout(() => setTracks(false), 1500);
     return () => clearTimeout(t);
-  }, []);
+  }, [targeted]);
 
-  const ringColor = isSelf ? Mape.blue : p.role === 'ADMIN' ? Mape.ink : '#2E9E5B';
+  const ringColor = targeted
+    ? Mape.red
+    : isSelf
+      ? Mape.blue
+      : p.role === 'ADMIN'
+        ? Mape.ink
+        : '#2E9E5B';
 
   return (
     <Marker
@@ -124,6 +154,7 @@ function PersonMarker({ p, isSelf }: { p: LocatedPerson; isSelf: boolean }) {
       title={`${personLabel(p)}${isSelf ? ' (tú)' : ''}`}
       description={p.role === 'ADMIN' ? 'Administrador' : p.name}
       anchor={{ x: 0.5, y: 0.5 }}
+      onPress={onSelect}
       tracksViewChanges={tracks}>
       <View style={markerStyles.wrap}>
         <View style={[markerStyles.ring, { backgroundColor: ringColor }]}>
@@ -159,6 +190,48 @@ export default function MapaScreen() {
   const locationPermission = useLocationPermission(); // pide permiso a cualquier rol
   const reporterStatus = useLocationReporter(locationPermission); // operadores reportan su GPS (por unidad)
   usePresenceReporter(locationPermission); // todos reportan su propia ubicación
+
+  // Guías/rutas: los supervisores/admin pueden marcarle una ruta a un usuario.
+  const canManage = user?.role === 'ADMIN' || user?.role === 'SUPERVISOR';
+  const { myGuide, assigned, assign, clear, dismissMyGuide } = useGuide();
+  const [targetPerson, setTargetPerson] = useState<LocatedPerson | null>(null);
+  const [assigning, setAssigning] = useState(false);
+
+  const assignedCoords = useMemo(
+    () => (assigned ? decodePolyline(assigned.route.polyline) : []),
+    [assigned],
+  );
+  const myGuideCoords = useMemo(
+    () => (myGuide ? decodePolyline(myGuide.route.polyline) : []),
+    [myGuide],
+  );
+
+  // En modo "asignar", el punto tocado en el mapa es el destino de la guía.
+  const onMapPress = (e: MapPressEvent) => {
+    if (!targetPerson) return;
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    const target = targetPerson;
+    setTargetPerson(null);
+    setAssigning(true);
+    void assign(target.id, {
+      lat: latitude,
+      lng: longitude,
+      name: personLabel(target),
+    })
+      .then((r) => {
+        if (r?.error) RNAlert.alert('No se pudo asignar la ruta', r.error);
+      })
+      .finally(() => setAssigning(false));
+  };
+
+  // Abre la navegación real en la app de Google Maps (deep link).
+  const openMaps = (dest: { lat: number; lng: number }) => {
+    Linking.openURL(`google.navigation:q=${dest.lat},${dest.lng}&mode=d`).catch(() =>
+      Linking.openURL(
+        `https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lng}`,
+      ),
+    );
+  };
 
   // Centra el mapa en la ubicación propia (admin u operador) al conceder permiso,
   // salvo que ya haya unidades ubicadas (esas tienen prioridad de encuadre).
@@ -388,13 +461,46 @@ export default function MapaScreen() {
           initialRegion={DEFAULT_REGION}
           showsUserLocation
           showsMyLocationButton={false}
+          onPress={onMapPress}
           toolbarEnabled={false}>
           {visible.map((u) => (
             <UnitMarker key={u.id} u={u} />
           ))}
           {locatedPeople.map((p) => (
-            <PersonMarker key={p.id} p={p} isSelf={p.id === user?.id} />
+            <PersonMarker
+              key={p.id}
+              p={p}
+              isSelf={p.id === user?.id}
+              targeted={targetPerson?.id === p.id}
+              onSelect={
+                canManage && p.id !== user?.id
+                  ? () => setTargetPerson((t) => (t?.id === p.id ? null : p))
+                  : undefined
+              }
+            />
           ))}
+          {/* Ruta que YO asigné (supervisor) — roja */}
+          {assignedCoords.length > 0 && assigned && (
+            <>
+              <Polyline coordinates={assignedCoords} strokeColor={Mape.red} strokeWidth={5} />
+              <Marker
+                coordinate={{ latitude: assigned.dest.lat, longitude: assigned.dest.lng }}
+                title="Destino"
+                pinColor="red"
+              />
+            </>
+          )}
+          {/* Ruta asignada A MÍ (usuario objetivo) — azul */}
+          {myGuideCoords.length > 0 && myGuide && (
+            <>
+              <Polyline coordinates={myGuideCoords} strokeColor={Mape.blue} strokeWidth={5} />
+              <Marker
+                coordinate={{ latitude: myGuide.dest.lat, longitude: myGuide.dest.lng }}
+                title="Tu destino"
+                pinColor="blue"
+              />
+            </>
+          )}
         </MapView>
 
         {/* Controles */}
@@ -412,6 +518,61 @@ export default function MapaScreen() {
           <LiveDot size={8} color={Mape.red} />
           <Text style={styles.liveText}>En vivo · {locatedPeople.length} en línea</Text>
         </View>
+
+        {/* Guía / ruta */}
+        {(targetPerson || assigning || assigned || myGuide) && (
+          <View style={styles.guideBanner}>
+            {targetPerson ? (
+              <>
+                <Text style={[styles.guideText, { flex: 1 }]} numberOfLines={2}>
+                  Toca el destino para {personLabel(targetPerson)}
+                </Text>
+                <PressableScale
+                  style={styles.guideBtnGhost}
+                  onPress={() => setTargetPerson(null)}>
+                  <Text style={styles.guideBtnGhostText}>Cancelar</Text>
+                </PressableScale>
+              </>
+            ) : assigning ? (
+              <Text style={styles.guideText}>Calculando ruta…</Text>
+            ) : myGuide ? (
+              <>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.guideText} numberOfLines={1}>
+                    Ruta{myGuide.assignedBy ? ` de ${myGuide.assignedBy}` : ''}
+                  </Text>
+                  <Text style={styles.guideMeta}>
+                    {myGuide.route.distanceText} · {myGuide.route.durationText}
+                  </Text>
+                </View>
+                <PressableScale
+                  style={styles.guideBtn}
+                  onPress={() => openMaps(myGuide.dest)}>
+                  <Text style={styles.guideBtnText}>Cómo llegar</Text>
+                </PressableScale>
+                <PressableScale style={styles.guideBtnGhost} onPress={dismissMyGuide}>
+                  <Text style={styles.guideBtnGhostText}>Ocultar</Text>
+                </PressableScale>
+              </>
+            ) : assigned ? (
+              <>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.guideText} numberOfLines={1}>
+                    Ruta enviada{assigned.dest.name ? ` a ${assigned.dest.name}` : ''}
+                  </Text>
+                  <Text style={styles.guideMeta}>
+                    {assigned.route.distanceText} · {assigned.route.durationText}
+                  </Text>
+                </View>
+                <PressableScale
+                  style={styles.guideBtnGhost}
+                  onPress={() => void clear(assigned.targetUserId)}>
+                  <Text style={styles.guideBtnGhostText}>Quitar</Text>
+                </PressableScale>
+              </>
+            ) : null}
+          </View>
+        )}
       </Animated.View>
 
       {/* Lista de usuarios en vivo (con scroll) debajo del mapa */}
@@ -611,6 +772,42 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   liveText: { color: Mape.white, fontSize: 12, fontFamily: Font.semibold },
+
+  guideBanner: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 12,
+    minHeight: 48,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: Mape.ink,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  guideText: { color: Mape.white, fontSize: 13, fontFamily: Font.semibold },
+  guideMeta: { color: '#C9C9C9', fontSize: 11, fontFamily: Font.regular, marginTop: 1 },
+  guideBtn: {
+    height: 34,
+    paddingHorizontal: 14,
+    borderRadius: 17,
+    backgroundColor: Mape.red,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  guideBtnText: { color: Mape.white, fontSize: 13, fontFamily: Font.semibold },
+  guideBtnGhost: {
+    height: 34,
+    paddingHorizontal: 12,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: Mape.panelBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  guideBtnGhostText: { color: Mape.white, fontSize: 13, fontFamily: Font.medium },
 
   listWrap: { height: 176 },
   listTitle: {
