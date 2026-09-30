@@ -98,13 +98,21 @@ export default function RadioScreen() {
     if (!activeChannel || disconnected) return;
     const apply = () => {
       try {
-        InCallManager.setForceSpeakerphoneOn(speakerOn);
+        if (speakerOn) {
+          // Fuerza el ALTAVOZ del teléfono, incluso con audífono conectado
+          // (setForceSpeakerphoneOn solo no basta sobre un audífono con cable).
+          InCallManager.setForceSpeakerphoneOn(true);
+          void InCallManager.chooseAudioRoute('SPEAKER_PHONE').catch(() => {});
+        } else {
+          // Normal: sin forzar -> suena en el audífono si hay, si no en el auricular.
+          InCallManager.setForceSpeakerphoneOn(false);
+        }
       } catch {
         /* noop */
       }
     };
     apply();
-    const t = setTimeout(apply, 500); // re-aplica por si InCallManager tardó en iniciar
+    const t = setTimeout(apply, 400); // re-aplica por si InCallManager tardó en iniciar
     return () => clearTimeout(t);
   }, [speakerOn, activeChannel, disconnected]);
 

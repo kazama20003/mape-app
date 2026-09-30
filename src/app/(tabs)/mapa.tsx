@@ -11,12 +11,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapView, {
-  Marker,
-  Polyline,
-  PROVIDER_GOOGLE,
-  type MapPressEvent,
-} from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 
 import Animated from 'react-native-reanimated';
 
@@ -192,44 +187,21 @@ export default function MapaScreen() {
   usePresenceReporter(locationPermission); // todos reportan su propia ubicación
 
   // Guías/rutas: los supervisores/admin pueden marcarle una ruta a un usuario.
-  const canManage = user?.role === 'ADMIN' || user?.role === 'SUPERVISOR';
-  const { myGuide, assigned, assign, clear, dismissMyGuide } = useGuide();
-  const [targetPerson, setTargetPerson] = useState<LocatedPerson | null>(null);
-  const [assigning, setAssigning] = useState(false);
+  const { myGuide, loading, guideTo, clearGuide } = useGuide();
 
-  const assignedCoords = useMemo(
-    () => (assigned ? decodePolyline(assigned.route.polyline) : []),
-    [assigned],
-  );
   const myGuideCoords = useMemo(
     () => (myGuide ? decodePolyline(myGuide.route.polyline) : []),
     [myGuide],
   );
 
-  const doAssign = (
-    target: LocatedPerson,
-    dest: { lat: number; lng: number; name?: string },
-  ) => {
-    setTargetPerson(null);
-    setAssigning(true);
-    void assign(target.id, dest)
-      .then((r) => {
-        if (r?.error) RNAlert.alert('No se pudo asignar la ruta', r.error);
-      })
-      .finally(() => setAssigning(false));
-  };
-
-  // 1) Elige a QUÉ operador guiar (toca su marcador).
+  // Toca un operador -> traza la ruta desde MI ubicación hasta él (para ir a
+  // buscarlo) y muestra "Cómo llegar".
   const onSelectPerson = (p: LocatedPerson) => {
-    setTargetPerson((t) => (t?.id === p.id ? null : p));
-  };
-
-  // 2) Toca el DESTINO en el mapa: se calcula la ruta para que ESE operador
-  //    llegue a ese punto.
-  const onMapPress = (e: MapPressEvent) => {
-    if (!targetPerson) return;
-    const { latitude, longitude } = e.nativeEvent.coordinate;
-    doAssign(targetPerson, { lat: latitude, lng: longitude, name: 'Destino' });
+    void guideTo({ lat: p.lastLat, lng: p.lastLng, name: personLabel(p) }).then(
+      (r) => {
+        if (r?.error) RNAlert.alert('No se pudo trazar la ruta', r.error);
+      },
+    );
   };
 
   // Abre la navegación real en la app de Google Maps (deep link).
@@ -469,7 +441,6 @@ export default function MapaScreen() {
           initialRegion={DEFAULT_REGION}
           showsUserLocation
           showsMyLocationButton={false}
-          onPress={onMapPress}
           toolbarEnabled={false}>
           {visible.map((u) => (
             <UnitMarker key={u.id} u={u} />
@@ -479,30 +450,17 @@ export default function MapaScreen() {
               key={p.id}
               p={p}
               isSelf={p.id === user?.id}
-              targeted={targetPerson?.id === p.id}
-              onSelect={
-                canManage && p.id !== user?.id ? () => onSelectPerson(p) : undefined
-              }
+              targeted={myGuide?.dest.lat === p.lastLat && myGuide?.dest.lng === p.lastLng}
+              onSelect={p.id !== user?.id ? () => onSelectPerson(p) : undefined}
             />
           ))}
-          {/* Ruta que YO asigné (supervisor) — roja */}
-          {assignedCoords.length > 0 && assigned && (
-            <>
-              <Polyline coordinates={assignedCoords} strokeColor={Mape.red} strokeWidth={5} />
-              <Marker
-                coordinate={{ latitude: assigned.dest.lat, longitude: assigned.dest.lng }}
-                title="Destino"
-                pinColor="red"
-              />
-            </>
-          )}
-          {/* Ruta asignada A MÍ (usuario objetivo) — azul */}
+          {/* MI ruta hacia el operador seleccionado — azul */}
           {myGuideCoords.length > 0 && myGuide && (
             <>
               <Polyline coordinates={myGuideCoords} strokeColor={Mape.blue} strokeWidth={5} />
               <Marker
                 coordinate={{ latitude: myGuide.dest.lat, longitude: myGuide.dest.lng }}
-                title="Tu destino"
+                title={myGuide.dest.name ?? 'Destino'}
                 pinColor="blue"
               />
             </>
@@ -525,27 +483,16 @@ export default function MapaScreen() {
           <Text style={styles.liveText}>En vivo · {locatedPeople.length} en línea</Text>
         </View>
 
-        {/* Guía / ruta */}
-        {(targetPerson || assigning || assigned || myGuide) && (
+        {/* Guía: MI ruta hacia el operador seleccionado */}
+        {(loading || myGuide) && (
           <View style={styles.guideBanner}>
-            {targetPerson ? (
-              <>
-                <Text style={[styles.guideText, { flex: 1 }]} numberOfLines={2}>
-                  Toca el destino en el mapa para {personLabel(targetPerson)}
-                </Text>
-                <PressableScale
-                  style={styles.guideBtnGhost}
-                  onPress={() => setTargetPerson(null)}>
-                  <Text style={styles.guideBtnGhostText}>Cancelar</Text>
-                </PressableScale>
-              </>
-            ) : assigning ? (
+            {loading && !myGuide ? (
               <Text style={styles.guideText}>Calculando ruta…</Text>
             ) : myGuide ? (
               <>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.guideText} numberOfLines={1}>
-                    Ruta{myGuide.assignedBy ? ` de ${myGuide.assignedBy}` : ''}
+                    Ir a {myGuide.dest.name ?? 'destino'}
                   </Text>
                   <Text style={styles.guideMeta}>
                     {myGuide.route.distanceText} ·{' '}
@@ -558,25 +505,7 @@ export default function MapaScreen() {
                   onPress={() => openMaps(myGuide.dest)}>
                   <Text style={styles.guideBtnText}>Cómo llegar</Text>
                 </PressableScale>
-                <PressableScale style={styles.guideBtnGhost} onPress={dismissMyGuide}>
-                  <Text style={styles.guideBtnGhostText}>Ocultar</Text>
-                </PressableScale>
-              </>
-            ) : assigned ? (
-              <>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.guideText} numberOfLines={1}>
-                    Ruta enviada{assigned.dest.name ? ` a ${assigned.dest.name}` : ''}
-                  </Text>
-                  <Text style={styles.guideMeta}>
-                    {assigned.route.distanceText} ·{' '}
-                    {assigned.route.durationInTrafficText || assigned.route.durationText}
-                    {assigned.route.hasTraffic ? ' · ⚠ tráfico' : ''}
-                  </Text>
-                </View>
-                <PressableScale
-                  style={styles.guideBtnGhost}
-                  onPress={() => void clear(assigned.targetUserId)}>
+                <PressableScale style={styles.guideBtnGhost} onPress={clearGuide}>
                   <Text style={styles.guideBtnGhostText}>Quitar</Text>
                 </PressableScale>
               </>

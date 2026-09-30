@@ -61,14 +61,17 @@ export function decodePolyline(encoded: string): LatLng[] {
  * vivo (`myGuide`) para seguirla y abrir "Cómo llegar".
  */
 export function useGuide() {
-  const { token } = useAuth();
-  const [myGuide, setMyGuide] = useState<Guide | null>(null); // asignada a mí
-  const [assigned, setAssigned] = useState<Guide | null>(null); // la que yo asigné
+  const { token, user } = useAuth();
+  const [myGuide, setMyGuide] = useState<Guide | null>(null); // MI ruta activa
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!token) return;
     const socket = getSocket('/tracking', token);
-    const onAssigned = (g: Guide) => setMyGuide(g);
+    const onAssigned = (g: Guide) => {
+      setMyGuide(g);
+      setLoading(false);
+    };
     const onCleared = () => setMyGuide(null);
     socket.on('guide:assigned', onAssigned);
     socket.on('guide:cleared', onCleared);
@@ -78,37 +81,31 @@ export function useGuide() {
     };
   }, [token]);
 
-  const assign = useCallback(
-    async (targetUserId: string, dest: { lat: number; lng: number; name?: string }) => {
-      if (!token) return { error: 'sin sesión' } as const;
+  // Traza la ruta desde MI ubicación actual hasta `dest` (para ir hacia ahí).
+  const guideTo = useCallback(
+    async (dest: { lat: number; lng: number; name?: string }) => {
+      if (!token || !user) return { error: 'sin sesión' } as const;
+      setLoading(true);
       const socket = getSocket('/tracking', token);
       const r = await ack<{ ok?: boolean; guide?: Guide; error?: string }>(
         socket,
         'guide:assign',
-        { targetUserId, dest },
+        { targetUserId: user.id, dest },
       );
-      if (r?.guide) setAssigned(r.guide);
+      setLoading(false);
+      if (r?.guide) setMyGuide(r.guide);
       return r;
     },
-    [token],
+    [token, user],
   );
 
-  const clear = useCallback(
-    async (targetUserId: string) => {
-      if (!token) return;
+  const clearGuide = useCallback(() => {
+    setMyGuide(null);
+    if (token && user) {
       const socket = getSocket('/tracking', token);
-      await ack(socket, 'guide:clear', { targetUserId });
-      setAssigned((a) => (a?.targetUserId === targetUserId ? null : a));
-    },
-    [token],
-  );
+      void ack(socket, 'guide:clear', { targetUserId: user.id });
+    }
+  }, [token, user]);
 
-  return {
-    myGuide,
-    assigned,
-    assign,
-    clear,
-    dismissAssigned: () => setAssigned(null),
-    dismissMyGuide: () => setMyGuide(null),
-  };
+  return { myGuide, loading, guideTo, clearGuide };
 }
