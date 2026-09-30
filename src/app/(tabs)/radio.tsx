@@ -44,9 +44,6 @@ export default function RadioScreen() {
     ? channels.map((c) => (c.description ? `${c.name} · ${c.description}` : c.name))
     : FALLBACK_CHANNELS;
 
-  const [muted, setMuted] = useState(false);
-  const toggleMuted = () => setMuted((v) => !v);
-
   // Ruteo de salida (lo manda el botón, estricto):
   //  - Altavoz (speakerOn=true)  -> fuerza el altavoz del teléfono.
   //  - Normal   (speakerOn=false) -> ruteo normal: audífono si hay, si no auricular.
@@ -66,7 +63,7 @@ export default function RadioScreen() {
   // undefined -> se libera el audio).
   const { talking, speaking, startTalking, stopTalking } = useRadioSfu(
     disconnected ? undefined : activeChannel?.id,
-    muted,
+    false, // la radio no se silencia
   );
 
   // Historial del canal (para reescuchar el último audio guardado).
@@ -259,20 +256,6 @@ export default function RadioScreen() {
 
         {/* Acciones */}
         <Animated.View style={styles.actions} entering={rise(3)}>
-          <PressableScale
-            style={[styles.actionBtn, !muted && styles.actionBtnActive]}
-            onPress={toggleMuted}
-            accessibilityLabel="Silenciar el canal">
-            <Icon
-              name="speaker"
-              size={18}
-              color={muted ? Mape.ink : Mape.white}
-              strokeWidth={1.8}
-            />
-            <Text style={[styles.actionText, !muted && styles.actionTextActive]}>
-              {muted ? 'Silencio' : 'Sonido'}
-            </Text>
-          </PressableScale>
           <PressableScale
             style={[styles.actionBtn, speakerOn && styles.actionBtnActive]}
             onPress={() => setSpeakerOn((v) => !v)}
