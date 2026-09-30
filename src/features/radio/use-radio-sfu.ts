@@ -60,6 +60,10 @@ export function useRadioSfu(
   const [speaking, setSpeaking] = useState(false);
   const [connected, setConnected] = useState(false); // socket vivo (internet)
   const [txFailed, setTxFailed] = useState(false); // la última transmisión falló
+  // Salida de audio real en uso, para mostrarla en la UI.
+  const [outputDevice, setOutputDevice] = useState<
+    'speaker' | 'bluetooth' | 'wired' | 'earpiece'
+  >('speaker');
 
   const deviceRef = useRef<Device | null>(null);
   const recvRef = useRef<Transport | null>(null);
@@ -90,14 +94,19 @@ export function useRadioSfu(
       if (speakerRef.current) {
         InCallManager.setForceSpeakerphoneOn(true);
         void InCallManager.chooseAudioRoute('SPEAKER_PHONE').catch(() => {});
+        setOutputDevice('speaker');
       } else {
         InCallManager.setForceSpeakerphoneOn(false);
-        const route = devicesRef.current.bt
-          ? 'BLUETOOTH'
-          : devicesRef.current.wired
-            ? 'WIRED_HEADSET'
-            : 'EARPIECE';
-        void InCallManager.chooseAudioRoute(route).catch(() => {});
+        if (devicesRef.current.bt) {
+          void InCallManager.chooseAudioRoute('BLUETOOTH').catch(() => {});
+          setOutputDevice('bluetooth');
+        } else if (devicesRef.current.wired) {
+          void InCallManager.chooseAudioRoute('WIRED_HEADSET').catch(() => {});
+          setOutputDevice('wired');
+        } else {
+          void InCallManager.chooseAudioRoute('EARPIECE').catch(() => {});
+          setOutputDevice('earpiece');
+        }
       }
     } catch {
       /* noop */
@@ -557,5 +566,13 @@ export function useRadioSfu(
     setTalking(false);
   }, [channelId, token]);
 
-  return { talking, speaking, startTalking, stopTalking, connected, txFailed };
+  return {
+    talking,
+    speaking,
+    startTalking,
+    stopTalking,
+    connected,
+    txFailed,
+    outputDevice,
+  };
 }

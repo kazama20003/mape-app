@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Animated from 'react-native-reanimated';
@@ -60,8 +60,23 @@ export default function RadioScreen() {
   // Audio EN VIVO por SFU (mediasoup): hablar/escuchar en tiempo real. Si está
   // desconectado (botón de la notificación), no se monta la sesión (channelId
   // undefined -> se libera el audio).
-  const { talking, speaking, startTalking, stopTalking, connected, txFailed } =
-    useRadioSfu(disconnected ? undefined : activeChannel?.id, false, speakerOn);
+  const {
+    talking,
+    speaking,
+    startTalking,
+    stopTalking,
+    connected,
+    txFailed,
+    outputDevice,
+  } = useRadioSfu(disconnected ? undefined : activeChannel?.id, false, speakerOn);
+
+  // Etiqueta de la salida "Normal" según el dispositivo realmente conectado.
+  const normalLabel =
+    outputDevice === 'bluetooth'
+      ? 'Bluetooth'
+      : outputDevice === 'wired'
+        ? 'Auricular'
+        : 'Teléfono';
 
   // Historial del canal (para reescuchar el último audio guardado).
   const { messages, playAudio } = useChannelChat(activeChannel?.id);
@@ -189,8 +204,11 @@ export default function RadioScreen() {
         </View>
       </Animated.View>
 
-      {/* Cuerpo */}
-      <View style={styles.body}>
+      {/* Cuerpo (scrollable para que quepa en pantallas pequeñas) */}
+      <ScrollView
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
+        showsVerticalScrollIndicator={false}>
         {/* Hablando ahora */}
         <Animated.View style={styles.speakingPill} entering={rise(1)}>
           {talking ? (
@@ -231,15 +249,15 @@ export default function RadioScreen() {
 
         {/* Botón PTT */}
         <Animated.View style={styles.pttWrap} entering={rise(2)}>
-          <PingRing size={292} color="#F2B8B5" delay={0} />
-          <PingRing size={266} color="#E58A86" delay={600} style={{ top: 13, left: 13 }} />
+          <PingRing size={236} color="#F2B8B5" delay={0} />
+          <PingRing size={214} color="#E58A86" delay={600} style={{ top: 11, left: 11 }} />
           <PressableScale
             onPressIn={onPttIn}
             onPressOut={onPttOut}
             style={[styles.ptt, talking && styles.pttActive]}
             accessibilityLabel="Mantén presionado o toca para hablar">
             <View style={styles.pttInner}>
-              <Icon name="mic" size={66} color={Mape.white} strokeWidth={2} />
+              <Icon name="mic" size={56} color={Mape.white} strokeWidth={2} />
               <Text style={styles.pttText}>{talking ? 'CORTAR' : 'HABLAR'}</Text>
             </View>
           </PressableScale>
@@ -269,8 +287,10 @@ export default function RadioScreen() {
             style={[styles.segBtn, !speakerOn && styles.segBtnActive]}
             onPress={() => setSpeakerOn(false)}
             accessibilityLabel="Salida por auricular o Bluetooth">
-            <Text style={[styles.segText, !speakerOn && styles.segTextActive]}>
-              Auricular / BT
+            <Text
+              style={[styles.segText, !speakerOn && styles.segTextActive]}
+              numberOfLines={1}>
+              {normalLabel}
             </Text>
           </PressableScale>
         </Animated.View>
@@ -292,8 +312,7 @@ export default function RadioScreen() {
             <Text style={styles.actionText}>Chat</Text>
           </PressableScale>
         </Animated.View>
-
-      </View>
+      </ScrollView>
 
     </Screen>
   );
@@ -367,7 +386,14 @@ const styles = StyleSheet.create({
   liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Mape.red },
   liveText: { fontSize: 12, color: Mape.white, fontFamily: Font.semibold },
 
-  body: { flex: 1, alignItems: 'center', paddingHorizontal: 24, paddingTop: 16, gap: 10 },
+  body: { flex: 1 },
+  bodyContent: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 14,
+    paddingBottom: 20,
+    gap: 10,
+  },
   speakingPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -385,14 +411,14 @@ const styles = StyleSheet.create({
   wave: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 26, marginLeft: 6 },
   waveBar: { width: 3, borderRadius: 2, backgroundColor: Mape.red },
 
-  pttWrap: { width: 292, height: 292, alignItems: 'center', justifyContent: 'center' },
+  pttWrap: { width: 236, height: 236, alignItems: 'center', justifyContent: 'center' },
   ring: { position: 'absolute', borderRadius: 96, borderWidth: 1.5 },
   ringOuter: { top: 0, left: 0, right: 0, bottom: 0, borderColor: '#F2B8B5' },
   ringInner: { top: 16, left: 16, right: 16, bottom: 16, borderColor: '#E58A86' },
   ptt: {
-    width: 248,
-    height: 248,
-    borderRadius: 124,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
     backgroundColor: Mape.red,
     alignItems: 'center',
     justifyContent: 'center',
