@@ -118,11 +118,18 @@ export default function RadioScreen() {
   // audífono. Sin audífono, altavoz si el usuario lo eligió, si no auricular.
   useEffect(() => {
     if (!activeChannel || disconnected) return;
-    try {
-      InCallManager.setForceSpeakerphoneOn(headset ? false : speakerOn);
-    } catch {
-      /* noop */
-    }
+    const apply = () => {
+      try {
+        InCallManager.setForceSpeakerphoneOn(headset ? false : speakerOn);
+      } catch {
+        /* noop */
+      }
+    };
+    apply();
+    // Re-aplica tras el reinicio de InCallManager al cambiar de canal: sin esto,
+    // el start() del canal nuevo dejaba el audio en altavoz (cruce de botones).
+    const t = setTimeout(apply, 500);
+    return () => clearTimeout(t);
   }, [speakerOn, activeChannel, disconnected, headset]);
 
   // Hablar MANTENIENDO presionado o con un TOQUE (queda fijado hasta el próximo

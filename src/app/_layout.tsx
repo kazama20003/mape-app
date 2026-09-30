@@ -8,16 +8,17 @@ import {
 } from '@expo-google-fonts/outfit';
 import { onlineManager, QueryClientProvider } from '@tanstack/react-query';
 import Constants from 'expo-constants';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, usePathname } from 'expo-router';
 import * as Network from 'expo-network';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { radioSession } from '@/features/radio/radio-session';
+import { storage, StorageKeys } from '@/lib/storage';
 
 import { AuthProvider, useAuth } from '@/features/auth/auth-context';
 import { usePushRegistration } from '@/features/notifications/use-push-registration';
@@ -57,6 +58,27 @@ function AuthGate() {
   const { status } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const pathname = usePathname();
+
+  // Recordar la última pestaña visitada para restaurarla si el SO mata la app
+  // (MIUI/Xiaomi es agresivo) y arranca en frío.
+  const lastRouteRef = useRef<string | null>(null);
+  const [routeLoaded, setRouteLoaded] = useState(false);
+  useEffect(() => {
+    storage
+      .get(StorageKeys.lastRoute)
+      .then((r) => {
+        lastRouteRef.current = r;
+      })
+      .catch(() => {})
+      .finally(() => setRouteLoaded(true));
+  }, []);
+  useEffect(() => {
+    // Solo pestañas (evita restaurar rutas con parámetros).
+    if (status === 'authenticated' && segments[0] === '(tabs)' && pathname) {
+      void storage.set(StorageKeys.lastRoute, pathname);
+    }
+  }, [pathname, segments, status]);
 
   usePushRegistration();
   useStartupPermissions(status === 'authenticated');
@@ -93,18 +115,21 @@ function AuthGate() {
   }, [router]);
 
   useEffect(() => {
-    if (status === 'loading') return;
+    if (status === 'loading' || !routeLoaded) return;
     const root = segments[0];
     const isProtected = root ? PROTECTED_ROOTS.includes(root) : false;
     // Pantallas de entrada (splash / onboarding / login): si ya hay sesión
-    // guardada, saltamos directo al mapa para no pedir login de nuevo.
+    // guardada, restauramos la última pestaña (o el mapa por defecto).
     const isEntry = !root || root === 'index' || root === 'inicio' || root === 'login';
     if (status === 'unauthenticated' && isProtected) {
       router.replace('/login');
     } else if (status === 'authenticated' && isEntry) {
-      router.replace('/mapa');
+      const saved = lastRouteRef.current;
+      router.replace(
+        saved && saved.startsWith('/') && saved !== '/login' ? saved : '/mapa',
+      );
     }
-  }, [status, segments, router]);
+  }, [status, segments, router, routeLoaded]);
 
   return (
     <Stack

@@ -11,4 +11,5 @@ export const StorageKeys = {
   accessToken: 'mape.accessToken',
   refreshToken: 'mape.refreshToken',
   user: 'mape.user',
+  lastRoute: 'mape.lastRoute',
 } as const;
