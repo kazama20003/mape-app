@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { DeviceEventEmitter, StyleSheet, Text, View } from 'react-native';
 import InCallManager from 'react-native-incall-manager';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -47,10 +47,27 @@ export default function RadioScreen() {
   const [muted, setMuted] = useState(false);
   const toggleMuted = () => setMuted((v) => !v);
 
-  // Ruteo de salida: Altavoz (fuerte, propio de la app) vs Normal (auricular /
-  // audífonos). Por defecto altavoz. Con audífonos, cambia a Normal para que no
-  // fuerce el altavoz del teléfono.
+  // Ruteo de salida: Altavoz (fuerte) vs Normal (auricular). Por defecto altavoz.
   const [speakerOn, setSpeakerOn] = useState(true);
+  // ¿Hay audífono con cable conectado? Si sí, NUNCA forzamos altavoz (el audio
+  // debe salir por el audífono). Bluetooth lo rutea InCallManager solo.
+  const [headset, setHeadset] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    InCallManager.getIsWiredHeadsetPluggedIn()
+      .then((v: { isWiredHeadsetPluggedIn: boolean }) => {
+        if (mounted) setHeadset(!!v?.isWiredHeadsetPluggedIn);
+      })
+      .catch(() => {});
+    const sub = DeviceEventEmitter.addListener(
+      'WiredHeadset',
+      (d: { isPlugged?: boolean }) => setHeadset(!!d?.isPlugged),
+    );
+    return () => {
+      mounted = false;
+      sub.remove();
+    };
+  }, []);
 
   // ¿Se pulsó "Desconectar" en la notificación? Al enfocar la pestaña de radio
   // se reconecta automáticamente.
@@ -97,18 +114,16 @@ export default function RadioScreen() {
     radioStatus,
   );
 
-  // Aplica el ruteo de salida (altavoz vs auricular/audífonos). Se re-aplica al
-  // cambiar el toggle, al entrar al canal y cada vez que empieza a sonar audio
-  // (alguien habla/escucha) — así en teléfonos donde el foco de audio se pierde,
-  // el sonido vuelve a salir por el altavoz correcto.
+  // Ruteo de salida: con audífono (cable/BT) NO se fuerza altavoz -> suena en el
+  // audífono. Sin audífono, altavoz si el usuario lo eligió, si no auricular.
   useEffect(() => {
-    if (!activeChannel) return;
+    if (!activeChannel || disconnected) return;
     try {
-      InCallManager.setForceSpeakerphoneOn(speakerOn);
+      InCallManager.setForceSpeakerphoneOn(headset ? false : speakerOn);
     } catch {
       /* noop */
     }
-  }, [speakerOn, activeChannel, speaking, talking]);
+  }, [speakerOn, activeChannel, disconnected, headset]);
 
   // Hablar MANTENIENDO presionado o con un TOQUE (queda fijado hasta el próximo
   // toque). Usamos refs para no depender del estado async dentro del gesto.
@@ -271,17 +286,19 @@ export default function RadioScreen() {
             </Text>
           </PressableScale>
           <PressableScale
-            style={[styles.actionBtn, speakerOn && styles.actionBtnActive]}
+            style={[styles.actionBtn, speakerOn && !headset && styles.actionBtnActive]}
             onPress={() => setSpeakerOn((v) => !v)}
+            disabled={headset}
             accessibilityLabel="Alternar altavoz o auricular">
             <Icon
               name="speaker"
               size={18}
-              color={speakerOn ? Mape.white : Mape.ink}
+              color={speakerOn && !headset ? Mape.white : Mape.ink}
               strokeWidth={1.8}
             />
-            <Text style={[styles.actionText, speakerOn && styles.actionTextActive]}>
-              {speakerOn ? 'Altavoz' : 'Normal'}
+            <Text
+              style={[styles.actionText, speakerOn && !headset && styles.actionTextActive]}>
+              {headset ? 'Audífono' : speakerOn ? 'Altavoz' : 'Normal'}
             </Text>
           </PressableScale>
           <PressableScale
