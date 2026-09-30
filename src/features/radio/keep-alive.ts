@@ -11,6 +11,7 @@ type RadioKeepAliveNative = {
   start: (channel?: string, status?: string) => void;
   update: (channel?: string, status?: string) => void;
   stop: () => void;
+  boostCommunicationVolume: () => void;
   isIgnoringBatteryOptimizations: () => Promise<boolean>;
 };
 
@@ -36,6 +37,15 @@ export function startKeepAliveService(channel?: string, status?: string) {
 export function updateKeepAliveNotification(channel: string, status: string) {
   try {
     native?.update(channel, status);
+  } catch {
+    /* noop */
+  }
+}
+
+/** Sube al máximo el volumen del audio en vivo (stream de comunicación). */
+export function boostCommunicationVolume() {
+  try {
+    native?.boostCommunicationVolume();
   } catch {
     /* noop */
   }

@@ -13,6 +13,7 @@ import { useAuth } from '@/features/auth/auth-context';
 import { getSocket } from '@/lib/socket';
 import { playEndBeep, playStartBeep } from '@/features/radio/beeps';
 import {
+  boostCommunicationVolume,
   startKeepAliveService,
   stopKeepAliveService,
 } from '@/features/radio/keep-alive';
@@ -20,6 +21,19 @@ import type { Socket } from 'socket.io-client';
 
 // react-native-webrtc expone los objetos WebRTC globales que mediasoup-client usa.
 registerGlobals();
+
+// Constraints del micrófono. autoGainControl (AGC) NORMALIZA el volumen de
+// captura: quien habla bajo o lejos del micro se sube automáticamente, así todos
+// se escuchan más parejo (evita que en un canal se oiga fuerte y en otro bajo,
+// que depende de quién habla). + cancelación de eco y supresión de ruido.
+const MIC_CONSTRAINTS = {
+  audio: {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  },
+  video: false,
+};
 
 // ack con TIMEOUT: si el socket se cae en medio de una petición, el callback de
 // socket.io nunca llega; sin timeout, el `await` se colgaría para siempre y
@@ -279,10 +293,7 @@ export function useRadioSfu(
               .catch(errb);
           });
           sendRef.current = send;
-          const stream = await mediaDevices.getUserMedia({
-            audio: true,
-            video: false,
-          });
+          const stream = await mediaDevices.getUserMedia(MIC_CONSTRAINTS);
           if (cancelled) {
             stream.getTracks().forEach((t) => t.stop());
             return;
@@ -402,6 +413,11 @@ export function useRadioSfu(
     } catch {
       /* noop */
     }
+    // Sube al máximo el volumen del stream de comunicación (por donde suena la voz
+    // en vivo). Así se escucha fuerte al entrar a la radio; el usuario puede
+    // bajarlo con los botones de volumen. Se re-aplica en los timers de abajo
+    // porque InCallManager.start() cambia el modo de audio con un retardo interno.
+    boostCommunicationVolume();
     // Aplica la ruta AHORA y varias veces después: InCallManager.start() resetea
     // la ruta a "auto" con un retardo interno, así que re-aplicamos para que el
     // Altavoz (o Normal) quede fijo desde el inicio (sin el desfase del arranque).
@@ -413,6 +429,7 @@ export function useRadioSfu(
     const forceApply = () => {
       lastRouteRef.current = null;
       applyRoute();
+      boostCommunicationVolume();
     };
     const routeTimers = [800, 2000].map((ms) => setTimeout(forceApply, ms));
     // Cuando cambian los dispositivos (conectas/desconectas Bluetooth o cable),
@@ -533,10 +550,7 @@ export function useRadioSfu(
         sendRef.current = send;
       }
       if (!localStreamRef.current) {
-        localStreamRef.current = await mediaDevices.getUserMedia({
-          audio: true,
-          video: false,
-        });
+        localStreamRef.current = await mediaDevices.getUserMedia(MIC_CONSTRAINTS);
       }
       const track = localStreamRef.current.getAudioTracks()[0];
       // stopTracks:false -> no detener el mic pre-armado al cerrar el productor.
