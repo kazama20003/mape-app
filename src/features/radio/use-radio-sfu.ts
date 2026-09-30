@@ -406,20 +406,11 @@ export function useRadioSfu(
         ka.volume = 0;
         ka.play();
         keepAliveRef.current = ka;
-        // CLAVE para 2do plano: activar los controles de pantalla de bloqueo
-        // arranca el foreground service de audio (AudioControlsService). SIN
-        // esto Android detiene la reproducción en background a los ~3 min y
-        // MIUI mata el proceso -> la radio dejaba de reconectar fuera de la
-        // app. Con el service vivo el proceso sobrevive y el watchdog reconecta.
-        try {
-          ka.setActiveForLockScreen(
-            true,
-            { title: 'Radio Mape', artist: 'En línea' },
-            { isLiveStream: true },
-          );
-        } catch {
-          /* noop */
-        }
+        // NOTA: NO usamos setActiveForLockScreen aquí. Activaría una MediaSession
+        // que reproduce por el stream de música (A2DP en Bluetooth) y entra en
+        // conflicto con el audio de voz (SCO) -> lag y cortes al rutear al
+        // audífono BT. El proceso se mantiene vivo en 2do plano con el
+        // foreground service de UBICACIÓN, que no toca el ruteo de audio.
       } catch {
         /* noop */
       }
@@ -427,12 +418,6 @@ export function useRadioSfu(
     return () => {
       routeTimers.forEach(clearTimeout);
       deviceSub.remove();
-      try {
-        // Suelta el foreground service antes de liberar el player.
-        keepAliveRef.current?.setActiveForLockScreen(false);
-      } catch {
-        /* noop */
-      }
       try {
         keepAliveRef.current?.remove();
       } catch {
