@@ -206,22 +206,40 @@ export default function MapaScreen() {
     [myGuide],
   );
 
-  // En modo "asignar", el punto tocado en el mapa es el destino de la guía.
-  const onMapPress = (e: MapPressEvent) => {
-    if (!targetPerson) return;
-    const { latitude, longitude } = e.nativeEvent.coordinate;
-    const target = targetPerson;
+  const doAssign = (
+    target: LocatedPerson,
+    dest: { lat: number; lng: number; name?: string },
+  ) => {
     setTargetPerson(null);
     setAssigning(true);
-    void assign(target.id, {
-      lat: latitude,
-      lng: longitude,
-      name: personLabel(target),
-    })
+    void assign(target.id, dest)
       .then((r) => {
         if (r?.error) RNAlert.alert('No se pudo asignar la ruta', r.error);
       })
       .finally(() => setAssigning(false));
+  };
+
+  // Guía OPERADOR -> OPERADOR: 1er toque elige a quién guiar; 2º toque (a otro
+  // operador en línea) fija el destino y calcula la ruta.
+  const onSelectPerson = (p: LocatedPerson) => {
+    if (!targetPerson) {
+      setTargetPerson(p);
+    } else if (targetPerson.id === p.id) {
+      setTargetPerson(null); // tocar el mismo = deseleccionar
+    } else {
+      doAssign(targetPerson, {
+        lat: p.lastLat,
+        lng: p.lastLng,
+        name: personLabel(p),
+      });
+    }
+  };
+
+  // (Opcional) tocar un punto libre del mapa como destino.
+  const onMapPress = (e: MapPressEvent) => {
+    if (!targetPerson) return;
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    doAssign(targetPerson, { lat: latitude, lng: longitude, name: 'Destino' });
   };
 
   // Abre la navegación real en la app de Google Maps (deep link).
@@ -473,9 +491,7 @@ export default function MapaScreen() {
               isSelf={p.id === user?.id}
               targeted={targetPerson?.id === p.id}
               onSelect={
-                canManage && p.id !== user?.id
-                  ? () => setTargetPerson((t) => (t?.id === p.id ? null : p))
-                  : undefined
+                canManage && p.id !== user?.id ? () => onSelectPerson(p) : undefined
               }
             />
           ))}
@@ -525,7 +541,8 @@ export default function MapaScreen() {
             {targetPerson ? (
               <>
                 <Text style={[styles.guideText, { flex: 1 }]} numberOfLines={2}>
-                  Toca el destino para {personLabel(targetPerson)}
+                  Guiando a {personLabel(targetPerson)} — toca otro operador en
+                  línea como destino
                 </Text>
                 <PressableScale
                   style={styles.guideBtnGhost}
