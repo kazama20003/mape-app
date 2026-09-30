@@ -13,7 +13,7 @@ import * as Network from 'expo-network';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import { DeviceEventEmitter, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -85,34 +85,16 @@ function AuthGate() {
   useBackgroundPermission(status === 'authenticated');
   useChatRealtime();
 
-  // Acción "Desconectar" de la notificación de radio: corta la sesión (cierra
-  // los sockets), quita la notificación y sale al mapa (desmonta la radio).
+  // Acción "Desconectar" de la notificación de radio (foreground service nativo):
+  // el módulo nativo emite "RadioDisconnect" -> cortamos la sesión (libera audio
+  // y sockets) y salimos al mapa. Se reconecta al volver a la pestaña de radio.
   useEffect(() => {
     if (Constants.appOwnership === 'expo' || Platform.OS === 'web') return;
-    let sub: { remove: () => void } | undefined;
-    void (async () => {
-      try {
-        const Notifications = await import('expo-notifications');
-        sub = Notifications.addNotificationResponseReceivedListener((resp) => {
-          const data = resp.notification.request.content.data as
-            | { kind?: string }
-            | undefined;
-          if (data?.kind !== 'radio') return;
-          if (resp.actionIdentifier === 'DESCONECTAR') {
-            // Marca la sesión como desconectada: la pantalla de radio libera el
-            // audio y quita la notificación. Se reconecta al volver a la pestaña.
-            radioSession.leave();
-            Notifications.dismissNotificationAsync('radio-live-status').catch(
-              () => {},
-            );
-            router.replace('/mapa');
-          }
-        });
-      } catch {
-        /* noop */
-      }
-    })();
-    return () => sub?.remove();
+    const sub = DeviceEventEmitter.addListener('RadioDisconnect', () => {
+      radioSession.leave();
+      router.replace('/mapa');
+    });
+    return () => sub.remove();
   }, [router]);
 
   useEffect(() => {

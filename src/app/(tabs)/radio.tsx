@@ -17,7 +17,7 @@ import { useChannels } from '@/features/data/hooks';
 import { useChannelChat } from '@/features/radio/use-channel-chat';
 import { useRadioSfu } from '@/features/radio/use-radio-sfu';
 import { playEndBeep } from '@/features/radio/beeps';
-import { useRadioNotification } from '@/features/radio/use-radio-notification';
+import { updateKeepAliveNotification } from '@/features/radio/keep-alive';
 import { radioSession, useRadioDisconnected } from '@/features/radio/radio-session';
 import {
   isMiui,
@@ -124,17 +124,21 @@ export default function RadioScreen() {
     });
   };
 
-  // Notificación persistente del canal: estado + botón "Hablar" (abre la app).
+  // Notificación persistente (foreground service nativo): muestra el CANAL y el
+  // estado. Es la misma notificación que mantiene viva la radio en 2do plano, así
+  // que en background también se ve en qué canal estás. (Antes había una segunda
+  // notificación de expo que se duplicaba y salía genérica sin el canal.)
   const radioStatus = talking
     ? 'Transmitiendo…'
     : speaking
       ? 'Alguien está hablando'
       : 'Escuchando';
-  useRadioNotification(
-    activeChannel && !disconnected ? channelNames[channel] : undefined,
-    !!activeChannel && !disconnected,
-    radioStatus,
-  );
+  const channelLabel = activeChannel ? channelNames[channel] : undefined;
+  useEffect(() => {
+    if (channelLabel && !disconnected) {
+      updateKeepAliveNotification(channelLabel, radioStatus);
+    }
+  }, [channelLabel, disconnected, radioStatus]);
 
   // (El ruteo Altavoz/Normal lo maneja useRadioSfu: lo aplica tras iniciar la
   // sesión de audio y lo re-aplica para vencer el reset de InCallManager.start.)

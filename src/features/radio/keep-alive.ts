@@ -8,7 +8,8 @@ import { NativeModules, Platform } from 'react-native';
  * (dev/web/Expo Go), no hace nada.
  */
 type RadioKeepAliveNative = {
-  start: () => void;
+  start: (channel?: string, status?: string) => void;
+  update: (channel?: string, status?: string) => void;
   stop: () => void;
   isIgnoringBatteryOptimizations: () => Promise<boolean>;
 };
@@ -23,9 +24,18 @@ if (Platform.OS === 'android' && !native) {
   console.warn('[KeepAlive] módulo nativo RadioKeepAlive NO disponible');
 }
 
-export function startKeepAliveService() {
+export function startKeepAliveService(channel?: string, status?: string) {
   try {
-    native?.start();
+    native?.start(channel, status);
+  } catch {
+    /* noop */
+  }
+}
+
+/** Actualiza el canal/estado que muestra la notificación persistente. */
+export function updateKeepAliveNotification(channel: string, status: string) {
+  try {
+    native?.update(channel, status);
   } catch {
     /* noop */
   }
