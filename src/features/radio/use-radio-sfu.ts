@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DeviceEventEmitter } from 'react-native';
+import { AppState, DeviceEventEmitter } from 'react-native';
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import InCallManager from 'react-native-incall-manager';
 import { Device, type types as msTypes } from 'mediasoup-client';
@@ -308,8 +308,34 @@ export function useRadioSfu(
     // haya conectado, y el botón Hablar funciona apenas se abre la pantalla.
     void setup();
 
+    // Vigilante de reconexión. socket.io ya reintenta solo, pero en 2do plano
+    // Android espacia mucho los timers y a veces la señal no vuelve hasta que
+    // se reabre la app. Mientras el foreground service (keepalive de silencio)
+    // mantenga vivo el proceso, forzamos el reintento cada pocos segundos:
+    //  - si el socket está caído -> socket.connect() (fuerza reconexión)
+    //  - si reconectó pero la sesión de audio no quedó armada -> re-armar
+    const ensureAlive = () => {
+      if (cancelled) return;
+      if (!socket.connected) {
+        try {
+          socket.connect();
+        } catch {
+          /* noop */
+        }
+      } else if (!deviceRef.current && !settingUp) {
+        void setup();
+      }
+    };
+    const watchdog = setInterval(ensureAlive, 4000);
+    // Al volver al frente, recupera de inmediato (sin esperar el tick).
+    const appSub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') ensureAlive();
+    });
+
     return () => {
       cancelled = true;
+      clearInterval(watchdog);
+      appSub.remove();
       socket.off('ms:newProducer', onNewProducer);
       socket.off('ms:producerClosed', onProducerClosed);
       socket.off('connect', onConnect);
